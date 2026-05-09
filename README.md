@@ -2,7 +2,7 @@
 
 A top-down fly fishing game built in p5.js. Paddle a kayak around a procedural multi-basin lake, watch the wildlife, and fly fish for bluegill, pumpkinseed, crappie, and largemouth bass.
 
-[**Play it →**](#) <!-- replaced after publishing -->
+[**Play it → perkinscole.github.io/bass-lake**](https://perkinscole.github.io/bass-lake/)
 
 ## Controls
 
