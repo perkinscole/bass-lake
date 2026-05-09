@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bass Lake</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: #0a1418; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="hud-controls">
+      W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly
+    </div>
+    <div id="hud-fly">Fly: —</div>
+    <div id="hud-catch">Caught: —</div>
+  </div>
+  <div id="catch-toast"></div>
+  <div id="menu">
+    <div class="menu-card">
+      <div class="title">Bass Lake</div>
+      <div class="tagline">fly fishing from a kayak on a procedural lake</div>
+
+      <div class="fly-grid" id="fly-grid"><!-- populated by sketch.js --></div>
+
+      <div class="controls">
+        <div class="ctrl-row"><span class="key">W S</span> paddle forward / back</div>
+        <div class="ctrl-row"><span class="key">A D</span> turn the kayak</div>
+        <div class="ctrl-row"><span class="key">mouse</span> hold to false-cast (line grows each cycle), release to deliver</div>
+        <div class="ctrl-row"><span class="key">click</span> while a fish is on the line — reel it in</div>
+        <div class="ctrl-row"><span class="key">1 / 2 / 3</span> switch fly</div>
+        <div class="ctrl-row"><span class="key">scroll</span> zoom</div>
+      </div>
+
+      <button id="start-button">Cast Off</button>
+    </div>
+  </div>
+  <style>
+    #hud {
+      position: fixed; top: 8px; left: 10px;
+      color: rgba(220, 230, 240, 0.7);
+      font: 12px/1.5 -apple-system, system-ui, sans-serif;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #hud-fly { color: rgba(255, 220, 130, 0.9); margin-top: 4px; }
+    #hud-catch { color: rgba(180, 220, 255, 0.85); }
+    #catch-toast {
+      position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease-out;
+      z-index: 11;
+      text-align: center;
+    }
+    #catch-toast .card {
+      background: rgba(20, 35, 30, 0.85);
+      border: 2px solid rgba(255, 220, 130, 0.8);
+      border-radius: 10px;
+      padding: 14px 22px 18px 22px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+    }
+    #catch-toast img {
+      display: block;
+      margin: 0 auto 10px auto;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+      width: 220px;
+      height: auto;
+    }
+    #catch-toast .label {
+      color: rgba(255, 230, 150, 0.95);
+      font: 600 22px/1 -apple-system, system-ui, sans-serif;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+      letter-spacing: 0.5px;
+    }
+    #catch-toast .species {
+      color: rgba(220, 240, 255, 0.95);
+      font: 500 14px/1 -apple-system, system-ui, sans-serif;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    /* ---- MENU ---- */
+    #menu {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 22, 18, 0.78);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 0.4s ease-out;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #menu.hidden { opacity: 0; pointer-events: none; }
+
+    #menu .menu-card {
+      background: linear-gradient(135deg, rgba(22, 38, 32, 0.95), rgba(12, 24, 20, 0.95));
+      border: 2px solid rgba(255, 220, 130, 0.5);
+      border-radius: 14px;
+      padding: 32px 44px 28px 44px;
+      max-width: 560px;
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7);
+      color: rgba(220, 230, 240, 0.92);
+      font: 14px/1.5 -apple-system, system-ui, sans-serif;
+      text-align: center;
+    }
+
+    #menu .title {
+      font: 700 44px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.95);
+      letter-spacing: 2px;
+      text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
+      margin-bottom: 6px;
+    }
+    #menu .tagline {
+      color: rgba(180, 215, 200, 0.85);
+      font-style: italic;
+      margin-bottom: 26px;
+    }
+
+    #menu .fly-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 26px;
+    }
+    #menu .fly-card {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 8px;
+      padding: 10px 8px;
+    }
+    #menu .fly-card img {
+      display: block;
+      margin: 0 auto 6px auto;
+      width: 80px;
+      height: auto;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+    #menu .fly-card .name {
+      color: rgba(255, 220, 140, 0.9);
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      margin-bottom: 2px;
+    }
+    #menu .fly-card .target {
+      color: rgba(200, 220, 230, 0.75);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #menu .controls {
+      text-align: left;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 22px;
+    }
+    #menu .ctrl-row { padding: 3px 0; color: rgba(220, 230, 240, 0.85); }
+    #menu .ctrl-row .key {
+      display: inline-block;
+      min-width: 56px;
+      padding: 1px 8px;
+      margin-right: 10px;
+      background: rgba(255, 220, 130, 0.15);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      border-radius: 4px;
+      color: rgba(255, 230, 150, 0.95);
+      text-align: center;
+      font-family: 'SF Mono', Menlo, monospace;
+      font-size: 12px;
+    }
+
+    #menu button {
+      background: rgba(255, 220, 130, 0.92);
+      color: rgba(20, 35, 30, 0.95);
+      border: none;
+      border-radius: 8px;
+      padding: 12px 36px;
+      font: 700 16px -apple-system, system-ui, sans-serif;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      transition: transform 0.1s ease-out, background 0.15s ease-out;
+    }
+    #menu button:hover { background: rgba(255, 235, 170, 1); transform: translateY(-1px); }
+    #menu button:active { transform: translateY(1px); }
+  </style>
+  <script src="sprites.js"></script>
+  <script src="sketch.js"></script>
+</body>
+</html>
