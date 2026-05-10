@@ -711,9 +711,12 @@ class Lake {
   }
 
   _pickBasins() {
+    // Basins overlap heavily so the lake reads as one connected body of water
+    // (with three deeper zones) rather than three separate ponds with land
+    // in the middle.
     let cx = this.w / 2, cy = this.h / 2;
-    let R = min(this.w, this.h) * 0.13;
-    let spacing = min(this.w, this.h) * 0.22;
+    let R = min(this.w, this.h) * 0.20;
+    let spacing = min(this.w, this.h) * 0.16;
     return [
       { x: cx - spacing * 0.85 + random(-80, 80), y: cy - spacing * 0.6 + random(-80, 80), r: R * random(0.95, 1.25) },
       { x: cx + spacing * 0.95 + random(-80, 80), y: cy - spacing * 0.4 + random(-80, 80), r: R * random(0.85, 1.10) },
@@ -787,14 +790,16 @@ class Lake {
       let x = i * this.gridSize;
       for (let j = 0; j <= this.rows; j++) {
         let y = j * this.gridSize;
-        // bias from basins (max wins, so basins are deepest)
+        // basins contribute additively so overlapping basins stay water in
+        // between (instead of leaving a central land mass at the centroid)
         let bias = 0;
         for (let b of this.basins) {
           let d = dist(x, y, b.x, b.y);
           let v = 1 - constrain(d / b.r, 0, 1);
-          bias = max(bias, pow(v, 1.2));
+          bias += v;                       // linear, additive
         }
-        // bias from channels — find min distance to any segment of the meandering path
+        bias = Math.min(bias, 1.0);         // cap at 1 so peaks don't blow out
+        // channels still use max (they're thin connecting features)
         for (let c of this.channels) {
           let minD = Infinity;
           for (let s of c.segments) {
