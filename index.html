@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <title>Bass Lake</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Top-down fly fishing game in p5.js — paddle a kayak around a procedural lake and cast for bluegill, pumpkinseed, crappie, and largemouth bass.">
 
   <!-- Favicon (largemouth bass) -->
@@ -37,6 +41,19 @@
     <div id="hud-catch">Caught: —</div>
   </div>
   <div id="catch-toast"></div>
+
+  <!-- Touch controls (visible only on coarse-pointer / touch devices) -->
+  <div id="touch-ui">
+    <div id="fly-bar">
+      <button class="fly-btn" data-fly="fly">Dry Fly</button>
+      <button class="fly-btn" data-fly="nymph">Nymph</button>
+      <button class="fly-btn" data-fly="woolyBugger">Wooly Bugger</button>
+    </div>
+    <div id="joystick">
+      <div id="joystick-stick"></div>
+    </div>
+    <button id="cast-btn">CAST</button>
+  </div>
   <div id="menu">
     <div class="menu-card">
       <div class="title">Bass Lake</div>
@@ -214,6 +231,93 @@
     }
     #menu button:hover { background: rgba(255, 235, 170, 1); transform: translateY(-1px); }
     #menu button:active { transform: translateY(1px); }
+
+    /* ---- TOUCH CONTROLS ---- */
+    /* Hidden by default; shown on coarse-pointer (touch) devices. */
+    #touch-ui { display: none; }
+    @media (pointer: coarse), (max-width: 720px) {
+      #touch-ui { display: block; }
+      /* Hide the verbose desktop hint on touch */
+      #hud-controls { display: none; }
+      /* Make HUD smaller on phone */
+      #hud { font-size: 11px; max-width: 60%; }
+    }
+    #touch-ui {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 12;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    #touch-ui > * { pointer-events: auto; }
+
+    #fly-bar {
+      position: fixed; top: 12px; right: 12px;
+      display: flex; gap: 6px;
+      flex-direction: column;
+    }
+    .fly-btn {
+      background: rgba(20, 35, 30, 0.7);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      color: rgba(255, 230, 150, 0.9);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: 600 11px/1 -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .fly-btn.active {
+      background: rgba(255, 220, 130, 0.85);
+      color: rgba(20, 35, 30, 0.95);
+    }
+
+    #joystick {
+      position: fixed;
+      bottom: 28px; left: 28px;
+      width: 130px; height: 130px;
+      background: rgba(20, 35, 30, 0.45);
+      border: 2px solid rgba(255, 220, 130, 0.4);
+      border-radius: 50%;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      touch-action: none;
+    }
+    #joystick-stick {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 60px; height: 60px;
+      margin: -30px 0 0 -30px;
+      background: rgba(255, 220, 130, 0.85);
+      border-radius: 50%;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      transition: transform 0.05s linear;
+    }
+
+    #cast-btn {
+      position: fixed;
+      bottom: 36px; right: 36px;
+      width: 110px; height: 110px;
+      background: rgba(255, 220, 130, 0.85);
+      color: rgba(20, 35, 30, 0.95);
+      border: 3px solid rgba(255, 240, 180, 0.95);
+      border-radius: 50%;
+      font: 700 18px -apple-system, system-ui, sans-serif;
+      letter-spacing: 1.5px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      touch-action: none;
+      cursor: pointer;
+    }
+    #cast-btn.charging {
+      background: rgba(255, 130, 80, 0.95);
+      border-color: rgba(255, 200, 130, 1);
+      transform: scale(0.94);
+    }
+
+    /* Prevent text selection on the canvas while dragging */
+    canvas { touch-action: none; }
   </style>
   <script src="sprites.js"></script>
   <script src="sketch.js"></script>

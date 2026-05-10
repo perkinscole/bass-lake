@@ -184,6 +184,108 @@ function setup() {
     document.getElementById('menu').classList.add('hidden');
     menuOpen = false;
   });
+  initTouchControls();
+}
+
+// ---- TOUCH UI ----
+function initTouchControls() {
+  // Fly selector buttons
+  let flyBtns = document.querySelectorAll('.fly-btn');
+  let updateActive = () => {
+    flyBtns.forEach(b => b.classList.toggle('active', b.dataset.fly === selectedFly));
+  };
+  flyBtns.forEach(b => {
+    b.addEventListener('click', e => {
+      if (menuOpen) return;
+      selectedFly = b.dataset.fly;
+      updateActive();
+      e.preventDefault();
+    });
+  });
+  updateActive();
+  // refresh active highlight whenever user uses 1/2/3 keys too — poll cheaply
+  setInterval(updateActive, 200);
+
+  // Virtual joystick (writes into the existing keys.{up,down,left,right} bools)
+  let stick = document.getElementById('joystick-stick');
+  let base = document.getElementById('joystick');
+  let activePointer = null;
+  let originX = 0, originY = 0;
+  const MAX_R = 50;          // pixels of stick travel
+  const DEADZONE = 0.20;
+
+  let setStickFromPointer = (clientX, clientY) => {
+    let rect = base.getBoundingClientRect();
+    let cx = rect.left + rect.width / 2;
+    let cy = rect.top + rect.height / 2;
+    let dx = clientX - cx;
+    let dy = clientY - cy;
+    let mag = Math.hypot(dx, dy);
+    if (mag > MAX_R) { dx = (dx / mag) * MAX_R; dy = (dy / mag) * MAX_R; }
+    stick.style.transform = `translate(${dx}px, ${dy}px)`;
+    let nx = dx / MAX_R, ny = dy / MAX_R;
+    keys.left  = nx < -DEADZONE;
+    keys.right = nx >  DEADZONE;
+    keys.up    = ny < -DEADZONE;
+    keys.down  = ny >  DEADZONE;
+  };
+  let resetStick = () => {
+    stick.style.transform = 'translate(0,0)';
+    keys.left = keys.right = keys.up = keys.down = false;
+    activePointer = null;
+  };
+  base.addEventListener('pointerdown', e => {
+    if (menuOpen) return;
+    activePointer = e.pointerId;
+    base.setPointerCapture(e.pointerId);
+    setStickFromPointer(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  base.addEventListener('pointermove', e => {
+    if (e.pointerId !== activePointer) return;
+    setStickFromPointer(e.clientX, e.clientY);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
+    base.addEventListener(evt, e => {
+      if (e.pointerId === activePointer) resetStick();
+    });
+  });
+
+  // Cast button — touch and hold to false-cast, release to deliver. On mobile
+  // the cast goes in the direction of the kayak's current heading (no cursor).
+  let castBtn = document.getElementById('cast-btn');
+  let castPointer = null;
+  castBtn.addEventListener('pointerdown', e => {
+    if (menuOpen) return;
+    castPointer = e.pointerId;
+    castBtn.setPointerCapture(e.pointerId);
+    castBtn.classList.add('charging');
+    // If a fish is already on the line, this tap reels it in instead of starting a cast.
+    if (cast && cast.state === 'fishing') {
+      cast.startReel();
+      castBtn.classList.remove('charging');
+      return;
+    }
+    if (cast && cast.state !== 'done') return;
+    // Aim the cast toward the bow of the kayak by faking the mouse position
+    // ahead of the kayak. The aim helpers in FlyCast read mouseX/mouseY/zoom/cam.
+    let aheadDist = MAX_CAST_RANGE * 0.9;
+    let wx = player.pos.x + Math.cos(player.heading) * aheadDist;
+    let wy = player.pos.y + Math.sin(player.heading) * aheadDist;
+    window.mouseX = (wx - cam.x) * zoom;
+    window.mouseY = (wy - cam.y) * zoom;
+    cast = new FlyCast();
+    e.preventDefault();
+  });
+  let endCast = (e) => {
+    if (e.pointerId !== castPointer) return;
+    castBtn.classList.remove('charging');
+    castPointer = null;
+    if (cast && cast.state === 'aerial') cast.release();
+  };
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
+    castBtn.addEventListener(evt, endCast);
+  });
 }
 
 function populateMenuFlyGrid() {
