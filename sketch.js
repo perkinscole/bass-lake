@@ -148,17 +148,20 @@ let menuOpen = true;     // game ignores input while menu is up
 // Drop your audio files into /sounds/ with these filenames; missing files are
 // skipped silently so the game still runs. Use .mp3 for broadest support.
 const SOUND_FILES = {
-  cast_start:    'sounds/cast_start.mp3',     // false-cast begins (whoosh)
-  cast_release:  'sounds/cast_release.mp3',   // line shoots out
-  splash:        'sounds/splash.mp3',         // fly lands on water
-  bite:          'sounds/bite.mp3',           // fish takes the fly
-  hookset:       'sounds/hookset.mp3',        // line goes tight
-  reel_loop:     'sounds/reel_loop.mp3',      // looping reel click while reeling
-  catch:         'sounds/catch.mp3',          // fish landed
-  snap:          'sounds/snap.mp3',           // line breaks
-  paddle:        'sounds/paddle.mp3',         // paddle stroke in water
-  buy:           'sounds/buy.mp3',            // shop purchase
-  ambient:       'sounds/ambient.mp3',        // looping bg (birds, wind, water)
+  cast_start:    'sounds/cast_start.mp3',           // false-cast begins (whoosh)
+  cast_release:  'sounds/cast_release.mp3',         // line shoots out
+  splash:        'sounds/splash.mp3',               // fly lands on water
+  bite:          'sounds/bite.mp3',                 // fish takes the fly
+  hookset:       'sounds/hookset.mp3',              // line goes tight
+  reel_loop:     'sounds/reel_loop.mp3',            // looping reel click while reeling
+  catch:         'sounds/catch.mp3',                // fish landed
+  snap:          'sounds/snap.mp3',                 // line breaks
+  paddle:        'sounds/paddle.mp3',               // paddle stroke in water
+  buy:           'sounds/buy.mp3',                  // shop purchase
+  // Ambient layers — quietly blended together while you're playing
+  ambient:       'sounds/naturebackground.mp3',     // main nature bed
+  ambient_birds: 'sounds/bird sounds.mp3',          // bird chirps layer
+  ambient_wind:  'sounds/wind.mp3',                 // light wind layer
 };
 
 let sounds = {};
@@ -184,10 +187,12 @@ function loadSounds() {
 }
 
 function unlockAudio() {
-  // Browsers block audio until a user gesture. The first click/tap calls this.
   if (audioUnlocked) return;
   audioUnlocked = true;
-  if (sounds.ambient) startLoop('ambient', { volume: 0.35 });
+  // Layer ambient beds at low volumes for a richer outdoor atmosphere
+  if (sounds.ambient)       startLoop('ambient',       { volume: 0.35 });
+  if (sounds.ambient_birds) startLoop('ambient_birds', { volume: 0.18 });
+  if (sounds.ambient_wind)  startLoop('ambient_wind',  { volume: 0.22 });
 }
 
 function playSound(name, opts = {}) {
