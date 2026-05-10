@@ -52,6 +52,7 @@ const FLY_CONFIG = {
 let selectedFly = 'fly';
 let catchCount = { bluegill: 0, pumpkinseed: 0, crappie: 0, bass: 0 };
 let lastCatchToast = null;        // { species, time } for brief on-screen popup
+let lastMissToast = null;         // { reason, time } when a fish escapes
 
 // Pre-baked static world image — drawn once at setup, then sub-region blitted
 // every frame. Contains: forest floor, dirt/sand specks, trees, lake water +
@@ -260,7 +261,11 @@ function initTouchControls() {
     castPointer = e.pointerId;
     castBtn.setPointerCapture(e.pointerId);
     castBtn.classList.add('charging');
-    // If a fish is already on the line, this tap reels it in instead of starting a cast.
+    // Fish on the line — hold-to-reel during the fight (apply tension)
+    if (cast && cast.state === 'hooked') {
+      cast.reeling = true;
+      return;
+    }
     if (cast && cast.state === 'fishing') {
       cast.startReel();
       castBtn.classList.remove('charging');
@@ -282,6 +287,7 @@ function initTouchControls() {
     castBtn.classList.remove('charging');
     castPointer = null;
     if (cast && cast.state === 'aerial') cast.release();
+    if (cast && cast.state === 'hooked') cast.reeling = false;
   };
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
     castBtn.addEventListener(evt, endCast);
@@ -583,6 +589,34 @@ function draw() {
         `crappie ${catchCount.crappie}  ·  bass ${catchCount.bass}`;
     }
   }
+  // Fight UI bars
+  let fightUI = document.getElementById('fight-ui');
+  if (fightUI) {
+    let fighting = cast && cast.state === 'hooked';
+    fightUI.classList.toggle('hidden', !fighting);
+    if (fighting) {
+      let tFill = document.getElementById('tension-fill');
+      let sFill = document.getElementById('stamina-fill');
+      if (tFill) tFill.style.width = `${constrain(cast.tension * 100, 0, 100)}%`;
+      if (sFill) sFill.style.width = `${constrain(cast.fishStamina * 100, 0, 100)}%`;
+    }
+  }
+
+  // Miss toast (line snap, hook slip)
+  if (lastMissToast) {
+    let age = frameCount - lastMissToast.time;
+    let toast = document.getElementById('miss-toast');
+    if (toast) {
+      if (age < 150) {
+        toast.textContent = lastMissToast.reason === 'snap' ? 'Line snapped!' : 'Got away!';
+        toast.style.opacity = age < 110 ? '1' : `${(150 - age) / 40}`;
+      } else {
+        toast.style.opacity = '0';
+        lastMissToast = null;
+      }
+    }
+  }
+
   if (lastCatchToast) {
     let age = frameCount - lastCatchToast.time;
     let toast = document.getElementById('catch-toast');
@@ -1886,7 +1920,13 @@ class FlyCast {
     this.flightDuration = 0;
     this.driftSeed = random(1000);
     this.hookedFish = null;
-    this.fightT = 0;                       // how long the fish has been on the line
+    this.fightT = 0;                       // frames since hookset
+    this.reeling = false;                  // player applying tension this frame
+    this.tension = 0;                      // 0..1 — line load. >= 1 → snap
+    this.fishStamina = 1;                  // 1 → fresh, 0 → played out
+    this.runTimer = 0;                     // frames remaining in a fish run
+    this.runCooldown = 0;                  // frames before another run can start
+    this.runDir = { x: 0, y: 0 };          // direction the current run is pulling
   }
 
   _rodTip() {
@@ -1947,31 +1987,98 @@ class FlyCast {
       let prey = this._findBitingFish();
       if (prey) this._setHook(prey);
     } else if (this.state === 'hooked') {
-      // hooked fish is puppet-tracked to the fly position; the fly itself
-      // moves toward the kayak as the player reels.
+      // ---- FIGHT ----
+      // Player holds reel button (mouse / cast button) to apply tension.
+      // Reeling drains the fish's stamina and pulls the fly toward the rod;
+      // however, while a fish is RUNNING, tension climbs fast and can snap
+      // the line. Letting go during a run safely lets out line.
       this.fightT++;
       let r = this._rodTip();
-      let dx = r.x - this.flyX;
-      let dy = r.y - this.flyY;
-      let d = Math.hypot(dx, dy);
-      if (d < 22) {
-        // fish landed!
-        this._onCatch();
-      } else {
-        // fish resists — slow reel + occasional pull
-        let pullBack = Math.sin(this.fightT * 0.08) * 0.6;
-        let speed = 1.6 + pullBack;
-        this.flyX += (dx / d) * speed;
-        this.flyY += (dy / d) * speed;
-        // the fish surfaces a bit while hooked (visible commotion)
-        if (this.hookedFish) {
-          this.hookedFish.pos.x = this.flyX;
-          this.hookedFish.pos.y = this.flyY;
-          if (this.hookedFish.vel) this.hookedFish.vel.set(0, 0);
-          if ('z' in this.hookedFish) this.hookedFish.z = 0.05;
+      let toX = r.x - this.flyX, toY = r.y - this.flyY;
+      let dToRod = Math.hypot(toX, toY) || 1;
+
+      // -- Run trigger --
+      if (this.runTimer === 0 && this.runCooldown === 0) {
+        // Lower base rate — average ~6-8s between runs at full stamina.
+        let runChance = 0.001 + this.fishStamina * 0.004;
+        if (Math.random() < runChance) {
+          this.runTimer = 40 + Math.floor(Math.random() * 70);
+          let perpX = -toY / dToRod, perpY = toX / dToRod;
+          let side = Math.random() < 0.5 ? -1 : 1;
+          this.runDir.x = -toX / dToRod * 0.7 + perpX * side * 0.7;
+          this.runDir.y = -toY / dToRod * 0.7 + perpY * side * 0.7;
+          let m = Math.hypot(this.runDir.x, this.runDir.y) || 1;
+          this.runDir.x /= m; this.runDir.y /= m;
         }
-        // surface commotion — small ripple every so often
-        if (frameCount % 14 === 0) ripples.push(new Ripple(this.flyX, this.flyY, 12));
+      }
+
+      // -- Update tension and fly position --
+      let isRunning = this.runTimer > 0;
+      let runStrength = isRunning ? (1.4 + this.fishStamina * 1.0) : 0;
+
+      let reelSpeed = this.reeling ? Math.max(1.5 - runStrength * 0.6, 0.4) : 0;
+
+      let netX = (toX / dToRod) * reelSpeed + this.runDir.x * runStrength;
+      let netY = (toY / dToRod) * reelSpeed + this.runDir.y * runStrength;
+      this.flyX += netX;
+      this.flyY += netY;
+
+      // tension dynamics:
+      //   calm reeling   → tension settles around 0.4 (safe steady-state) and
+      //                    drains the fish's stamina
+      //   reeling on run → tension climbs fast and can break the line
+      //   not reeling    → tension decays toward zero
+      if (this.reeling) {
+        if (isRunning) {
+          this.tension += 0.013 + this.fishStamina * 0.006;
+        } else {
+          this.tension = lerp(this.tension, 0.42, 0.06);   // approach steady
+          this.fishStamina = Math.max(0, this.fishStamina - 0.0028);
+        }
+      } else {
+        this.tension *= 0.92;
+      }
+      this.tension = Math.min(this.tension, 1.4);
+
+      if (this.runTimer > 0) this.runTimer--;
+      else if (this.runCooldown > 0) this.runCooldown--;
+      if (this.runTimer === 0 && this.runDir.x !== 0) {
+        this.runDir.x = 0; this.runDir.y = 0;
+        this.runCooldown = 60 + Math.floor(Math.random() * 100);
+      }
+
+      // -- Resolution checks --
+      if (this.tension >= 1.0) {
+        this._onLineSnap();
+        return;
+      }
+      let dToRodNew = Math.hypot(r.x - this.flyX, r.y - this.flyY);
+      // landed: fish is close AND played out (mostly tired)
+      if (dToRodNew < 24 && this.fishStamina < 0.55) {
+        this._onCatch();
+        return;
+      }
+      // stay within cast range — fish can't tow the line beyond a max
+      if (dToRodNew > MAX_CAST_RANGE * 1.1) {
+        // fish has run too far — adds tension and clamps position
+        let f = (MAX_CAST_RANGE * 1.1) / dToRodNew;
+        this.flyX = r.x - (r.x - this.flyX) * f;
+        this.flyY = r.y - (r.y - this.flyY) * f;
+        this.tension += 0.015;
+      }
+
+      // puppet the hooked fish to the fly
+      if (this.hookedFish) {
+        this.hookedFish.pos.x = this.flyX;
+        this.hookedFish.pos.y = this.flyY;
+        if (this.hookedFish.vel) this.hookedFish.vel.set(0, 0);
+        if ('z' in this.hookedFish) this.hookedFish.z = 0.05;
+      }
+
+      // surface commotion — bigger ripple while fish is running
+      let rippleRate = isRunning ? 6 : 14;
+      if (frameCount % rippleRate === 0) {
+        ripples.push(new Ripple(this.flyX, this.flyY, isRunning ? 18 : 12));
       }
     } else if (this.state === 'reeling') {
       let dx = player.pos.x - this.flyX;
@@ -2045,6 +2152,7 @@ class FlyCast {
     fish.hooked = true;
     this.state = 'hooked';
     this.fightT = 0;
+    this.runCooldown = 90;     // grace period before the fish's first run
     ripples.push(new Ripple(this.flyX, this.flyY, 28));
     ripples.push(new Ripple(this.flyX, this.flyY, 14));
   }
@@ -2054,7 +2162,6 @@ class FlyCast {
       let species = this.hookedFish.species;
       catchCount[species] = (catchCount[species] || 0) + 1;
       lastCatchToast = { species, time: frameCount };
-      // remove the fish from its array
       let idx = panfish.indexOf(this.hookedFish);
       if (idx >= 0) panfish.splice(idx, 1);
       else {
@@ -2063,6 +2170,17 @@ class FlyCast {
       }
       this.hookedFish = null;
     }
+    this.state = 'done';
+  }
+
+  _onLineSnap() {
+    // Line broke — fish escapes with the fly. Brief ripple + miss toast.
+    if (this.hookedFish) {
+      this.hookedFish.hooked = false;
+      this.hookedFish = null;
+    }
+    ripples.push(new Ripple(this.flyX, this.flyY, 22));
+    lastMissToast = { reason: 'snap', time: frameCount };
     this.state = 'done';
   }
 
@@ -2239,22 +2357,22 @@ function drawWeed(w) {
 
 function mousePressed() {
   if (menuOpen) return;
+  if (cast && cast.state === 'hooked') {
+    cast.reeling = true;
+    return;
+  }
   if (cast && cast.state === 'fishing') {
-    // line is on water — reel it in
     cast.startReel();
     return;
   }
-  if (cast && cast.state !== 'done') {
-    // mid-flight or reeling — ignore
-    return;
-  }
-  // No active cast — start false-casting (line whips back/forth, growing each cycle)
+  if (cast && cast.state !== 'done') return;   // mid-flight or retrieving
   cast = new FlyCast();
 }
 
 function mouseReleased() {
   if (menuOpen) return;
   if (cast && cast.state === 'aerial') cast.release();
+  if (cast && cast.state === 'hooked') cast.reeling = false;
 }
 
 // ---- Environment props ----
