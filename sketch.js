@@ -350,21 +350,30 @@ function updateSonar() {
   sonarCtx.fillStyle = 'rgba(255, 220, 130, 0.08)';
   sonarCtx.fillRect(xCol, Math.floor(sonarH / 2), 1, 1);
 
-  // Plot fish within scan radius — bigger, brighter blips for closer / larger fish
+  // Plot fish using a sonar-cone apparent-depth model so passing fish trace
+  // arches: apparent_y = sqrt(depth² + lateral²). A fish off to the side
+  // echoes from a longer slant range than one directly below, so it shows up
+  // deeper on the display. As the kayak closes in, apparent_y dips toward
+  // true depth (the peak of the arch), then climbs again as it passes.
   let scanR2 = SONAR_RANGE * SONAR_RANGE;
+  let lateralScale = sonarH / SONAR_RANGE;     // world px → display px (vertical)
   let plot = (f, isBass) => {
     let dx = f.pos.x - player.pos.x;
     let dy = f.pos.y - player.pos.y;
     let d2 = dx * dx + dy * dy;
     if (d2 > scanR2) return;
-    let z = Math.max(0, Math.min(1, f.z != null ? f.z : 0.4));
-    // map fish's own depth (0..1) to the screen Y, but cap at the bottom contour
-    let y = Math.floor(2 + z * (sonarH - 4));
-    if (y > bottomY - 1) y = bottomY - 1;
+    let zNorm = Math.max(0, Math.min(1, f.z != null ? f.z : 0.4));
+    let depthPix = 2 + zNorm * (sonarH - 4);
+    let lateralPix = Math.sqrt(d2) * lateralScale;
+    let apparentY = Math.sqrt(depthPix * depthPix + lateralPix * lateralPix);
+    if (apparentY > sonarH - 2 || apparentY > bottomY - 1) return;
+    let y = Math.floor(apparentY);
     let color = SONAR_SPECIES_COLOR[f.species] || '#9c9';
-    let size = isBass ? 3 : 2;
     sonarCtx.fillStyle = color;
-    sonarCtx.fillRect(xCol - (size - 1), y - Math.floor(size / 2), size, size);
+    // 2px-wide, 1-2px tall blip — successive frames stitch into a curve
+    let h = isBass ? 2 : 1;
+    let w = isBass ? 2 : 1;
+    sonarCtx.fillRect(xCol - (w - 1), y - Math.floor(h / 2), w, h);
   };
   for (let f of panfish) plot(f, false);
   for (let b of bass)   plot(b, true);
