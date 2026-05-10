@@ -288,6 +288,8 @@ function setup() {
   if (shopClose) shopClose.addEventListener('click', () => {
     document.getElementById('shop').classList.add('hidden');
   });
+  let menuBtn = document.getElementById('menu-btn');
+  if (menuBtn) menuBtn.addEventListener('click', () => toggleMenu());
   initTouchControls();
 }
 
@@ -902,6 +904,11 @@ function windowResized() {
 }
 
 function keyPressed() {
+  // ESC / M reopens the menu (or closes it if already open).
+  if (keyCode === ESCAPE || key === 'm' || key === 'M') {
+    toggleMenu();
+    return;
+  }
   if (menuOpen) return;
   if (keyCode === LEFT_ARROW || key === 'a' || key === 'A') keys.left = true;
   if (keyCode === RIGHT_ARROW || key === 'd' || key === 'D') keys.right = true;
@@ -910,6 +917,19 @@ function keyPressed() {
   if (key === '1') trySelectFly('fly');
   if (key === '2') trySelectFly('nymph');
   if (key === '3') trySelectFly('woolyBugger');
+}
+
+function toggleMenu() {
+  let menuEl = document.getElementById('menu');
+  if (!menuEl) return;
+  menuOpen = !menuOpen;
+  menuEl.classList.toggle('hidden', !menuOpen);
+  // Refresh the locked-state visuals in the fly grid in case shopping happened
+  populateMenuFlyGrid();
+  // Release any held movement keys so the kayak doesn't drift while in menu
+  if (menuOpen) {
+    keys.left = keys.right = keys.up = keys.down = false;
+  }
 }
 
 function trySelectFly(name) {

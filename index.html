@@ -35,7 +35,7 @@
 <body>
   <div id="hud">
     <div id="hud-controls">
-      W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly
+      W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly · ESC menu
     </div>
     <div id="hud-fly">Fly: —</div>
     <div id="hud-money">$0</div>
@@ -65,6 +65,9 @@
     <div id="fight-hint">Hold to reel · let go when it runs!</div>
   </div>
   <div id="miss-toast"></div>
+
+  <!-- Reopen-menu button — visible on all platforms (desktop also has ESC) -->
+  <button id="menu-btn" title="Menu (Esc)">☰</button>
 
   <!-- Touch controls (visible only on coarse-pointer / touch devices) -->
   <div id="touch-ui">
@@ -474,6 +477,27 @@
 
     /* Prevent text selection on the canvas while dragging */
     canvas { touch-action: none; }
+
+    /* Menu reopen button (top-left, near HUD) */
+    #menu-btn {
+      position: fixed;
+      bottom: 12px; left: 12px;
+      width: 36px; height: 36px;
+      background: rgba(20, 35, 30, 0.7);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 8px;
+      font: 700 18px/1 -apple-system, system-ui, sans-serif;
+      cursor: pointer;
+      z-index: 10;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #menu-btn:hover { background: rgba(255, 220, 130, 0.18); }
+    /* On mobile the joystick lives bottom-left; move the menu button to top-right */
+    @media (pointer: coarse), (max-width: 720px) {
+      #menu-btn { top: 12px; left: 12px; bottom: auto; }
+    }
 
     /* ---- FIGHT UI ---- */
     #fight-ui {
