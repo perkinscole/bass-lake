@@ -202,29 +202,14 @@ function populateMenuFlyGrid() {
 }
 
 function buildSpeciesPortraits() {
-  // Map game-side species names to sprite keys defined in sprites.js
-  const map = {
-    bluegill: 'bluegill',
-    pumpkinseed: 'pumpkinseed',
-    crappie: 'crappie',
-    bass: 'largemouth_bass',
+  // External PNG portraits (place these files in /images/). The img tags load
+  // them lazily; if a file is missing the toast falls back to no image.
+  speciesPortraits = {
+    bluegill:    'images/bluegill-removebg-preview.png',
+    pumpkinseed: 'images/pumpkinseed-removebg-preview.png',
+    crappie:     'images/blackcrappie-removebg-preview.png',
+    bass:        'images/largemouth-removebg-preview.png',
   };
-  for (let species in map) {
-    let s = SPRITES[map[species]];
-    if (!s) continue;
-    let frame = s.frames[1] || s.frames[0];   // centered tail frame
-    let w = frame[0].length, h = frame.length;
-    let g = createGraphics(w, h);
-    g.pixelDensity(1);
-    g.noStroke();
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        let c = s.palette[frame[y][x]];
-        if (c) { g.fill(c); g.rect(x, y, 1, 1); }
-      }
-    }
-    speciesPortraits[species] = g.canvas.toDataURL('image/png');
-  }
 }
 
 function buildStaticImage() {
