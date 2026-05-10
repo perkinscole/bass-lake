@@ -13,7 +13,8 @@ let cattails = [];
 let rocks = [];
 let player;        // the kayak the user controls
 let cast = null;   // active fly cast (null when not cast)
-const MAX_CAST_RANGE = 480;
+let MAX_CAST_RANGE = 220;       // current cast range (depends on rod tier)
+const KAYAK_BASE_SPEED = 3.4;   // multiplied by kayak tier speed factor
 
 // ---- FLY TYPES ----
 // Each fly catches certain species. The player picks one with 1/2/3.
@@ -54,6 +55,84 @@ let catchCount = { bluegill: 0, pumpkinseed: 0, crappie: 0, bass: 0 };
 let lastCatchToast = null;        // { species, time } for brief on-screen popup
 let lastMissToast = null;         // { reason, time } when a fish escapes
 
+// ---- PROGRESSION ----
+// Player state — earned/spent through gameplay, saved to localStorage so it
+// persists across sessions. Start with the smallest setup; everything else
+// is bought from the tackle shop on the menu screen.
+const PROGRESS_KEY = 'bassLakeState_v1';
+let playerState = {
+  money: 0,
+  unlocks: {
+    flies: { fly: true, nymph: false, woolyBugger: false },
+    rod: 1,         // 1, 2, 3 — gates max cast range
+    kayak: 1,       // 1, 2, 3 — gates paddle speed
+    sonar: false,
+  },
+};
+const ROD_RANGES   = { 1: 220, 2: 350, 3: 480 };
+const KAYAK_SPEEDS = { 1: 1.0, 2: 1.3, 3: 1.6 };
+const REWARDS = {
+  bluegill:    5,
+  pumpkinseed: 8,
+  crappie:    15,
+  bass:       40,
+};
+const SHOP_ITEMS = [
+  { id: 'nymph',       cost: 25,  label: 'Nymph fly',        desc: 'Catches crappie',
+    check: s => !s.unlocks.flies.nymph,
+    apply: s => { s.unlocks.flies.nymph = true; } },
+  { id: 'rod2',        cost: 60,  label: 'Mid-grade rod',    desc: 'Longer cast (350ft max)',
+    check: s => s.unlocks.rod < 2,
+    apply: s => { s.unlocks.rod = 2; } },
+  { id: 'kayak2',      cost: 80,  label: 'Faster kayak',     desc: '+30% paddle speed',
+    check: s => s.unlocks.kayak < 2,
+    apply: s => { s.unlocks.kayak = 2; } },
+  { id: 'woolyBugger', cost: 120, label: 'Wooly Bugger',     desc: 'Catches largemouth bass',
+    check: s => !s.unlocks.flies.woolyBugger,
+    apply: s => { s.unlocks.flies.woolyBugger = true; } },
+  { id: 'sonar',       cost: 200, label: 'Fish finder',      desc: 'Side-view sonar display',
+    check: s => !s.unlocks.sonar,
+    apply: s => { s.unlocks.sonar = true; } },
+  { id: 'rod3',        cost: 250, label: 'Pro rod',          desc: 'Maximum cast (480ft)',
+    check: s => s.unlocks.rod < 3,
+    apply: s => { s.unlocks.rod = 3; } },
+  { id: 'kayak3',      cost: 350, label: 'Sea kayak',        desc: '+60% paddle speed',
+    check: s => s.unlocks.kayak < 3,
+    apply: s => { s.unlocks.kayak = 3; } },
+];
+
+function refreshUnlocks() {
+  MAX_CAST_RANGE = ROD_RANGES[playerState.unlocks.rod] || 220;
+  if (player) player.maxSpeed = KAYAK_BASE_SPEED * (KAYAK_SPEEDS[playerState.unlocks.kayak] || 1);
+  // hide sonar element if not unlocked
+  let sonarEl = document.getElementById('sonar');
+  if (sonarEl) sonarEl.style.display = playerState.unlocks.sonar ? '' : 'none';
+  // make sure selected fly is unlocked
+  if (!playerState.unlocks.flies[selectedFly]) selectedFly = 'fly';
+  // refresh tackle shop UI if open
+  populateShop();
+}
+
+function saveProgress() {
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(playerState)); } catch {}
+}
+function loadProgress() {
+  try {
+    let data = localStorage.getItem(PROGRESS_KEY);
+    if (data) {
+      let parsed = JSON.parse(data);
+      // shallow-merge so new fields added later get default values
+      if (parsed.money != null) playerState.money = parsed.money;
+      if (parsed.unlocks) {
+        if (parsed.unlocks.flies) Object.assign(playerState.unlocks.flies, parsed.unlocks.flies);
+        if (parsed.unlocks.rod   != null) playerState.unlocks.rod = parsed.unlocks.rod;
+        if (parsed.unlocks.kayak != null) playerState.unlocks.kayak = parsed.unlocks.kayak;
+        if (parsed.unlocks.sonar != null) playerState.unlocks.sonar = parsed.unlocks.sonar;
+      }
+    }
+  } catch {}
+}
+
 // Pre-baked static world image — drawn once at setup, then sub-region blitted
 // every frame. Contains: forest floor, dirt/sand specks, trees, lake water +
 // surface patches, tree shadows, shoreline edge, rocks, logs.
@@ -68,7 +147,7 @@ let menuOpen = true;     // game ignores input while menu is up
 // ---- SONAR ----
 let sonarCtx = null;
 let sonarW = 280, sonarH = 80;
-const SONAR_RANGE = 280;          // world-pixel scan radius around the kayak
+const SONAR_RANGE = 160;          // world-pixel scan radius around the kayak — tighter for shorter, more pronounced arches
 const SONAR_BG = '#0a1813';
 const SONAR_SPECIES_COLOR = {
   bluegill:    '#7fc88a',
@@ -93,6 +172,7 @@ const keys = {};
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
+  loadProgress();
   lake = new Lake(WORLD_W, WORLD_H);
 
   // spawn the kayak in the first basin and center the camera on it
@@ -193,10 +273,20 @@ function setup() {
   buildSpeciesPortraits();
   populateMenuFlyGrid();
   initSonar();
+  refreshUnlocks();
   let btn = document.getElementById('start-button');
   if (btn) btn.addEventListener('click', () => {
     document.getElementById('menu').classList.add('hidden');
     menuOpen = false;
+  });
+  let shopBtn = document.getElementById('shop-button');
+  if (shopBtn) shopBtn.addEventListener('click', () => {
+    populateShop();
+    document.getElementById('shop').classList.remove('hidden');
+  });
+  let shopClose = document.getElementById('shop-close');
+  if (shopClose) shopClose.addEventListener('click', () => {
+    document.getElementById('shop').classList.add('hidden');
   });
   initTouchControls();
 }
@@ -211,11 +301,18 @@ function initTouchControls() {
   flyBtns.forEach(b => {
     b.addEventListener('click', e => {
       if (menuOpen) return;
+      if (!playerState.unlocks.flies[b.dataset.fly]) return;   // locked
       selectedFly = b.dataset.fly;
       updateActive();
       e.preventDefault();
     });
   });
+  // also flag locked buttons with the .locked class for CSS styling
+  let updateLocked = () => {
+    flyBtns.forEach(b => b.classList.toggle('locked', !playerState.unlocks.flies[b.dataset.fly]));
+  };
+  updateLocked();
+  setInterval(updateLocked, 500);
   updateActive();
   // refresh active highlight whenever user uses 1/2/3 keys too — poll cheaply
   setInterval(updateActive, 200);
@@ -394,8 +491,43 @@ function populateMenuFlyGrid() {
   grid.innerHTML = entries.map(e => {
     let portrait = speciesPortraits[e.species];
     let img = portrait ? `<img src="${portrait}">` : '';
-    return `<div class="fly-card">${img}<div class="name">${FLY_CONFIG[e.fly].label}</div><div class="target">${e.desc}</div></div>`;
+    let locked = !playerState.unlocks.flies[e.fly];
+    return `<div class="fly-card${locked ? ' locked' : ''}">${img}<div class="name">${FLY_CONFIG[e.fly].label}</div><div class="target">${e.desc}</div></div>`;
   }).join('');
+}
+
+function populateShop() {
+  let list = document.getElementById('shop-list');
+  let moneyEl = document.getElementById('shop-money');
+  if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
+  if (!list) return;
+  list.innerHTML = SHOP_ITEMS.map(item => {
+    let owned = !item.check(playerState);
+    let canAfford = playerState.money >= item.cost;
+    let btnDisabled = owned || !canAfford;
+    let btnLabel = owned ? 'Owned' : 'Buy';
+    return `<div class="shop-item${owned ? ' owned' : ''}">
+      <div class="info">
+        <div class="name">${item.label}</div>
+        <div class="desc">${item.desc}</div>
+      </div>
+      <div class="price">$${item.cost}</div>
+      <button data-id="${item.id}" ${btnDisabled ? 'disabled' : ''}>${btnLabel}</button>
+    </div>`;
+  }).join('');
+  // Re-bind buy buttons
+  list.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      let item = SHOP_ITEMS.find(i => i.id === btn.dataset.id);
+      if (!item || !item.check(playerState) || playerState.money < item.cost) return;
+      playerState.money -= item.cost;
+      item.apply(playerState);
+      saveProgress();
+      refreshUnlocks();
+      populateMenuFlyGrid();   // unlocked fly visuals
+      populateShop();          // refresh prices/buttons
+    });
+  });
 }
 
 function buildSpeciesPortraits() {
@@ -666,12 +798,16 @@ function draw() {
   // ---- HUD updates (HTML overlay) ----
   if (frameCount % 6 === 0) {
     let flyEl = document.getElementById('hud-fly');
+    let moneyEl = document.getElementById('hud-money');
     let catchEl = document.getElementById('hud-catch');
     if (flyEl) {
-      flyEl.textContent =
-        `Fly: ${FLY_CONFIG[selectedFly].label}  ` +
-        `[1 ${FLY_CONFIG.fly.label}] [2 ${FLY_CONFIG.nymph.label}] [3 ${FLY_CONFIG.woolyBugger.label}]`;
+      let flyLabels = ['fly', 'nymph', 'woolyBugger'].map((k, i) => {
+        let unlocked = playerState.unlocks.flies[k];
+        return `[${i + 1} ${FLY_CONFIG[k].label}${unlocked ? '' : ' 🔒'}]`;
+      }).join(' ');
+      flyEl.textContent = `Fly: ${FLY_CONFIG[selectedFly].label}  ${flyLabels}`;
     }
+    if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
     if (catchEl) {
       catchEl.textContent =
         `Caught — bluegill ${catchCount.bluegill}  ·  pumpkinseed ${catchCount.pumpkinseed}  ·  ` +
@@ -723,10 +859,13 @@ function draw() {
           toast.dataset.species = key;
           let portrait = speciesPortraits[lastCatchToast.species];
           let imgTag = portrait ? `<img src="${portrait}" alt="${lastCatchToast.species}">` : '';
+          let moneyTag = lastCatchToast.money ? `<div class="reward">+$${lastCatchToast.money}</div>` : '';
           toast.innerHTML =
             `<div class="card">${imgTag}` +
             `<div class="label">Catch!</div>` +
-            `<div class="species">${lastCatchToast.species}</div></div>`;
+            `<div class="species">${lastCatchToast.species}</div>` +
+            moneyTag +
+            `</div>`;
         }
         toast.style.opacity = age < HOLD_FRAMES ? '1' : `${1 - (age - HOLD_FRAMES) / FADE_FRAMES}`;
       } else {
@@ -768,9 +907,13 @@ function keyPressed() {
   if (keyCode === RIGHT_ARROW || key === 'd' || key === 'D') keys.right = true;
   if (keyCode === UP_ARROW || key === 'w' || key === 'W') keys.up = true;
   if (keyCode === DOWN_ARROW || key === 's' || key === 'S') keys.down = true;
-  if (key === '1') selectedFly = 'fly';
-  if (key === '2') selectedFly = 'nymph';
-  if (key === '3') selectedFly = 'woolyBugger';
+  if (key === '1') trySelectFly('fly');
+  if (key === '2') trySelectFly('nymph');
+  if (key === '3') trySelectFly('woolyBugger');
+}
+
+function trySelectFly(name) {
+  if (playerState.unlocks.flies[name]) selectedFly = name;
 }
 function keyReleased() {
   if (keyCode === LEFT_ARROW || key === 'a' || key === 'A') keys.left = false;
@@ -1815,7 +1958,7 @@ class Kayak {
     this.targetHeading = 0;
     this.size = 22;                 // hull half-length-ish
     this.paddlePhase = 0;
-    this.maxSpeed = 3.4;
+    this.maxSpeed = KAYAK_BASE_SPEED * (KAYAK_SPEEDS[playerState.unlocks.kayak] || 1);
     this.acceleration = 0.22;
     this.friction = 0.93;
     this.wakeCooldown = 0;
@@ -2273,7 +2416,10 @@ class FlyCast {
     if (this.hookedFish) {
       let species = this.hookedFish.species;
       catchCount[species] = (catchCount[species] || 0) + 1;
-      lastCatchToast = { species, time: frameCount };
+      let reward = REWARDS[species] || 0;
+      playerState.money += reward;
+      saveProgress();
+      lastCatchToast = { species, time: frameCount, money: reward };
       let idx = panfish.indexOf(this.hookedFish);
       if (idx >= 0) panfish.splice(idx, 1);
       else {

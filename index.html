@@ -38,6 +38,7 @@
       W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly
     </div>
     <div id="hud-fly">Fly: —</div>
+    <div id="hud-money">$0</div>
     <div id="hud-catch">Caught: —</div>
   </div>
   <div id="catch-toast"></div>
@@ -93,7 +94,22 @@
         <div class="ctrl-row"><span class="key">scroll</span> zoom</div>
       </div>
 
-      <button id="start-button">Cast Off</button>
+      <div class="menu-actions">
+        <button id="shop-button" class="secondary">Tackle Shop</button>
+        <button id="start-button">Cast Off</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tackle shop modal — opens from the menu -->
+  <div id="shop" class="hidden">
+    <div class="shop-card">
+      <div class="shop-header">
+        <div class="shop-title">Tackle Shop</div>
+        <div class="shop-money" id="shop-money">$0</div>
+      </div>
+      <div class="shop-list" id="shop-list"></div>
+      <button id="shop-close">Back</button>
     </div>
   </div>
   <style>
@@ -105,6 +121,7 @@
       z-index: 10;
     }
     #hud-fly { color: rgba(255, 220, 130, 0.9); margin-top: 4px; }
+    #hud-money { color: rgba(190, 230, 130, 0.95); font-weight: 700; margin-top: 2px; }
     #hud-catch { color: rgba(180, 220, 255, 0.85); }
     #catch-toast {
       position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%);
@@ -142,6 +159,11 @@
       margin-top: 4px;
       text-transform: uppercase;
       letter-spacing: 1.5px;
+    }
+    #catch-toast .reward {
+      color: rgba(190, 230, 130, 0.95);
+      font: 700 16px/1 'SF Mono', Menlo, monospace;
+      margin-top: 8px;
     }
 
     /* ---- MENU ---- */
@@ -254,6 +276,117 @@
     }
     #menu button:hover { background: rgba(255, 235, 170, 1); transform: translateY(-1px); }
     #menu button:active { transform: translateY(1px); }
+    #menu button.secondary {
+      background: rgba(0, 0, 0, 0.35);
+      color: rgba(255, 220, 130, 0.95);
+      border: 1px solid rgba(255, 220, 130, 0.55);
+    }
+    #menu button.secondary:hover { background: rgba(255, 220, 130, 0.18); }
+    #menu .menu-actions { display: flex; gap: 12px; justify-content: center; }
+
+    #menu .fly-card.locked {
+      opacity: 0.4;
+      filter: grayscale(0.6);
+      position: relative;
+    }
+    #menu .fly-card.locked::after {
+      content: '🔒'; position: absolute; top: 6px; right: 8px;
+      font-size: 14px;
+    }
+
+    /* ---- TACKLE SHOP ---- */
+    #shop {
+      position: fixed; inset: 0;
+      background: rgba(10, 22, 18, 0.84);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 110;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #shop.hidden { display: none; }
+    #shop .shop-card {
+      background: linear-gradient(135deg, rgba(22, 38, 32, 0.98), rgba(12, 24, 20, 0.98));
+      border: 2px solid rgba(255, 220, 130, 0.5);
+      border-radius: 12px;
+      padding: 22px 28px;
+      width: 460px;
+      max-width: 90vw;
+      max-height: 86vh;
+      overflow-y: auto;
+      color: rgba(220, 230, 240, 0.92);
+      font: 14px/1.4 -apple-system, system-ui, sans-serif;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    #shop .shop-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 220, 130, 0.25);
+    }
+    #shop .shop-title {
+      font: 700 22px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.95);
+      letter-spacing: 1px;
+    }
+    #shop .shop-money {
+      color: rgba(190, 230, 130, 0.95);
+      font: 700 18px 'SF Mono', Menlo, monospace;
+    }
+    #shop .shop-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    #shop .shop-item {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    #shop .shop-item .info { flex: 1; }
+    #shop .shop-item .name {
+      color: rgba(255, 230, 150, 0.95);
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    #shop .shop-item .desc {
+      color: rgba(180, 200, 210, 0.75);
+      font-size: 12px;
+    }
+    #shop .shop-item .price {
+      color: rgba(190, 230, 130, 0.9);
+      font: 700 14px 'SF Mono', Menlo, monospace;
+      margin-right: 8px;
+    }
+    #shop .shop-item button {
+      background: rgba(255, 220, 130, 0.92);
+      color: rgba(20, 35, 30, 0.95);
+      border: none; border-radius: 6px;
+      padding: 6px 14px;
+      font: 700 12px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+    #shop .shop-item button:disabled {
+      background: rgba(120, 130, 130, 0.35);
+      color: rgba(220, 230, 240, 0.4);
+      cursor: not-allowed;
+    }
+    #shop .shop-item.owned {
+      opacity: 0.45;
+    }
+    #shop #shop-close {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 220, 130, 0.9);
+      border-radius: 8px;
+      padding: 10px;
+      font: 600 13px -apple-system, system-ui, sans-serif;
+      letter-spacing: 1px;
+      cursor: pointer;
+    }
+    .fly-btn.locked {
+      opacity: 0.35;
+      filter: grayscale(0.5);
+    }
 
     /* ---- TOUCH CONTROLS ---- */
     /* Hidden by default; shown on coarse-pointer (touch) devices. */
