@@ -153,7 +153,7 @@ const SOUND_FILES = {
   splash:        'sounds/splash.mp3',               // fly lands on water
   bite:          'sounds/bite.mp3',                 // fish takes the fly
   hookset:       'sounds/hookset.mp3',              // line goes tight
-  reel_loop:     'sounds/reel_loop.mp3',            // looping reel click while reeling
+  reel_loop:     'sounds/reelsound.mp3',            // looping reel click while reeling
   catch:         'sounds/catch.mp3',                // fish landed
   snap:          'sounds/snap.mp3',                 // line breaks
   paddle:        'sounds/paddle.mp3',               // paddle stroke in water
