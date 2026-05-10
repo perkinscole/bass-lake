@@ -2023,6 +2023,26 @@ class FlyCast {
       this.flyX += netX;
       this.flyY += netY;
 
+      // Keep the fly (and the hooked fish that's puppeted to it) inside the
+      // lake. If a run pushes the fly toward land, push it back along the
+      // inward normal and bleed the outward velocity component so it doesn't
+      // beach itself against the shoreline.
+      let inAmt = lake.insideAmount(this.flyX, this.flyY);
+      if (inAmt < 8) {
+        let inward = lake.inwardNormal(this.flyX, this.flyY);
+        let push = Math.max(0, 8 - inAmt);
+        this.flyX += inward.x * push;
+        this.flyY += inward.y * push;
+        // damp the run vector against the shore — the fish "turns" along the bank
+        let dotR = this.runDir.x * inward.x + this.runDir.y * inward.y;
+        if (dotR < 0) {
+          this.runDir.x -= inward.x * dotR;
+          this.runDir.y -= inward.y * dotR;
+          let m = Math.hypot(this.runDir.x, this.runDir.y);
+          if (m > 0) { this.runDir.x /= m; this.runDir.y /= m; }
+        }
+      }
+
       // tension dynamics:
       //   calm reeling   → tension settles around 0.4 (safe steady-state) and
       //                    drains the fish's stamina
