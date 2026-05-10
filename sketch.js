@@ -144,6 +144,101 @@ const STATIC_SCALE = 0.5;
 let speciesPortraits = {};
 let menuOpen = true;     // game ignores input while menu is up
 
+// ---- SOUND ----
+// Drop your audio files into /sounds/ with these filenames; missing files are
+// skipped silently so the game still runs. Use .mp3 for broadest support.
+const SOUND_FILES = {
+  cast_start:    'sounds/cast_start.mp3',     // false-cast begins (whoosh)
+  cast_release:  'sounds/cast_release.mp3',   // line shoots out
+  splash:        'sounds/splash.mp3',         // fly lands on water
+  bite:          'sounds/bite.mp3',           // fish takes the fly
+  hookset:       'sounds/hookset.mp3',        // line goes tight
+  reel_loop:     'sounds/reel_loop.mp3',      // looping reel click while reeling
+  catch:         'sounds/catch.mp3',          // fish landed
+  snap:          'sounds/snap.mp3',           // line breaks
+  paddle:        'sounds/paddle.mp3',         // paddle stroke in water
+  buy:           'sounds/buy.mp3',            // shop purchase
+  ambient:       'sounds/ambient.mp3',        // looping bg (birds, wind, water)
+};
+
+let sounds = {};
+let masterVolume = 0.7;
+let muted = false;
+let audioUnlocked = false;
+let activeLoops = {};
+
+function loadSounds() {
+  for (let [name, src] of Object.entries(SOUND_FILES)) {
+    let audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = src;
+    sounds[name] = audio;
+    // missing-file path: drop the entry so playSound becomes a no-op
+    audio.addEventListener('error', () => { delete sounds[name]; });
+  }
+  // restore mute pref
+  try {
+    let m = localStorage.getItem('bassLakeMuted');
+    muted = m === '1';
+  } catch {}
+}
+
+function unlockAudio() {
+  // Browsers block audio until a user gesture. The first click/tap calls this.
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  if (sounds.ambient) startLoop('ambient', { volume: 0.35 });
+}
+
+function playSound(name, opts = {}) {
+  if (muted || !audioUnlocked) return;
+  let s = sounds[name];
+  if (!s) return;
+  try {
+    let clone = s.cloneNode();
+    clone.volume = (opts.volume != null ? opts.volume : 1) * masterVolume;
+    if (opts.rate) clone.playbackRate = opts.rate;
+    let p = clone.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch {}
+}
+
+function startLoop(name, opts = {}) {
+  if (muted || !audioUnlocked) return;
+  if (activeLoops[name]) return;
+  let s = sounds[name];
+  if (!s) return;
+  try {
+    let loop = s.cloneNode();
+    loop.loop = true;
+    loop.volume = (opts.volume != null ? opts.volume : 0.6) * masterVolume;
+    let p = loop.play();
+    if (p && p.catch) p.catch(() => {});
+    activeLoops[name] = loop;
+  } catch {}
+}
+
+function stopLoop(name) {
+  let loop = activeLoops[name];
+  if (loop) {
+    try { loop.pause(); loop.currentTime = 0; } catch {}
+    delete activeLoops[name];
+  }
+}
+
+function setMuted(m) {
+  muted = m;
+  try { localStorage.setItem('bassLakeMuted', m ? '1' : '0'); } catch {}
+  for (let name in activeLoops) {
+    let loop = activeLoops[name];
+    if (!loop) continue;
+    if (m) { try { loop.pause(); } catch {} }
+    else   { try { loop.play().catch(() => {}); } catch {} }
+  }
+  let btn = document.getElementById('mute-btn');
+  if (btn) btn.textContent = m ? '🔇' : '🔊';
+}
+
 // ---- SONAR ----
 let sonarCtx = null;
 let sonarW = 280, sonarH = 80;
@@ -274,8 +369,10 @@ function setup() {
   populateMenuFlyGrid();
   initSonar();
   refreshUnlocks();
+  loadSounds();
   let btn = document.getElementById('start-button');
   if (btn) btn.addEventListener('click', () => {
+    unlockAudio();
     document.getElementById('menu').classList.add('hidden');
     menuOpen = false;
   });
@@ -290,6 +387,14 @@ function setup() {
   });
   let menuBtn = document.getElementById('menu-btn');
   if (menuBtn) menuBtn.addEventListener('click', () => toggleMenu());
+  let muteBtn = document.getElementById('mute-btn');
+  if (muteBtn) {
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.addEventListener('click', () => {
+      unlockAudio();
+      setMuted(!muted);
+    });
+  }
   initTouchControls();
 }
 
@@ -370,12 +475,13 @@ function initTouchControls() {
   let castPointer = null;
   castBtn.addEventListener('pointerdown', e => {
     if (menuOpen) return;
+    unlockAudio();
     castPointer = e.pointerId;
     castBtn.setPointerCapture(e.pointerId);
     castBtn.classList.add('charging');
-    // Fish on the line — hold-to-reel during the fight (apply tension)
     if (cast && cast.state === 'hooked') {
       cast.reeling = true;
+      startLoop('reel_loop', { volume: 0.5 });
       return;
     }
     if (cast && cast.state === 'fishing') {
@@ -384,14 +490,13 @@ function initTouchControls() {
       return;
     }
     if (cast && cast.state !== 'done') return;
-    // Aim the cast toward the bow of the kayak by faking the mouse position
-    // ahead of the kayak. The aim helpers in FlyCast read mouseX/mouseY/zoom/cam.
     let aheadDist = MAX_CAST_RANGE * 0.9;
     let wx = player.pos.x + Math.cos(player.heading) * aheadDist;
     let wy = player.pos.y + Math.sin(player.heading) * aheadDist;
     window.mouseX = (wx - cam.x) * zoom;
     window.mouseY = (wy - cam.y) * zoom;
     cast = new FlyCast();
+    playSound('cast_start');
     e.preventDefault();
   });
   let endCast = (e) => {
@@ -399,7 +504,10 @@ function initTouchControls() {
     castBtn.classList.remove('charging');
     castPointer = null;
     if (cast && cast.state === 'aerial') cast.release();
-    if (cast && cast.state === 'hooked') cast.reeling = false;
+    if (cast && cast.state === 'hooked') {
+      cast.reeling = false;
+      stopLoop('reel_loop');
+    }
   };
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
     castBtn.addEventListener(evt, endCast);
@@ -526,8 +634,9 @@ function populateShop() {
       item.apply(playerState);
       saveProgress();
       refreshUnlocks();
-      populateMenuFlyGrid();   // unlocked fly visuals
-      populateShop();          // refresh prices/buttons
+      populateMenuFlyGrid();
+      populateShop();
+      playSound('buy');
     });
   });
 }
@@ -2007,7 +2116,12 @@ class Kayak {
       let acc = thrust > 0 ? FORWARD_ACC : BACKWARD_ACC;
       this.vel.x += Math.cos(this.heading) * acc * thrust;
       this.vel.y += Math.sin(this.heading) * acc * thrust;
+      let prev = this.paddlePhase;
       this.paddlePhase += 0.22;
+      // sound: detect paddle-stroke beat — sin sign flip = side switch
+      if (Math.sign(Math.sin(prev)) !== Math.sign(Math.sin(this.paddlePhase))) {
+        playSound('paddle', { volume: 0.45, rate: 0.9 + Math.random() * 0.2 });
+      }
     }
     this.targetHeading = this.heading;   // hull always faces its current heading
 
@@ -2228,8 +2342,8 @@ class FlyCast {
       if (t >= 1) {
         this.state = 'fishing';
         this.airHeight = 0;
-        // a fly lands gently — small ripple, no splash
         ripples.push(new Ripple(this.flyX, this.flyY, 14));
+        playSound('splash', { volume: 0.7 });
       }
     } else if (this.state === 'fishing') {
       // Fly drifts a touch on the water surface
@@ -2372,6 +2486,7 @@ class FlyCast {
   // Called when the user releases the mouse — shoot the line forward.
   release() {
     if (this.state !== 'aerial') return;
+    playSound('cast_release');
     let r = this._rodTip();
     let aim = this._aimDir();
     // line length determines cast distance, clamped to mouse dist if shorter
@@ -2427,9 +2542,11 @@ class FlyCast {
     fish.hooked = true;
     this.state = 'hooked';
     this.fightT = 0;
-    this.runCooldown = 90;     // grace period before the fish's first run
+    this.runCooldown = 90;
     ripples.push(new Ripple(this.flyX, this.flyY, 28));
     ripples.push(new Ripple(this.flyX, this.flyY, 14));
+    playSound('bite');
+    playSound('hookset', { volume: 0.8 });
   }
 
   _onCatch() {
@@ -2440,6 +2557,8 @@ class FlyCast {
       playerState.money += reward;
       saveProgress();
       lastCatchToast = { species, time: frameCount, money: reward };
+      playSound('catch');
+      stopLoop('reel_loop');
       let idx = panfish.indexOf(this.hookedFish);
       if (idx >= 0) panfish.splice(idx, 1);
       else {
@@ -2452,13 +2571,14 @@ class FlyCast {
   }
 
   _onLineSnap() {
-    // Line broke — fish escapes with the fly. Brief ripple + miss toast.
     if (this.hookedFish) {
       this.hookedFish.hooked = false;
       this.hookedFish = null;
     }
     ripples.push(new Ripple(this.flyX, this.flyY, 22));
     lastMissToast = { reason: 'snap', time: frameCount };
+    playSound('snap');
+    stopLoop('reel_loop');
     this.state = 'done';
   }
 
@@ -2635,22 +2755,28 @@ function drawWeed(w) {
 
 function mousePressed() {
   if (menuOpen) return;
+  unlockAudio();
   if (cast && cast.state === 'hooked') {
     cast.reeling = true;
+    startLoop('reel_loop', { volume: 0.5 });
     return;
   }
   if (cast && cast.state === 'fishing') {
     cast.startReel();
     return;
   }
-  if (cast && cast.state !== 'done') return;   // mid-flight or retrieving
+  if (cast && cast.state !== 'done') return;
   cast = new FlyCast();
+  playSound('cast_start');
 }
 
 function mouseReleased() {
   if (menuOpen) return;
   if (cast && cast.state === 'aerial') cast.release();
-  if (cast && cast.state === 'hooked') cast.reeling = false;
+  if (cast && cast.state === 'hooked') {
+    cast.reeling = false;
+    stopLoop('reel_loop');
+  }
 }
 
 // ---- Environment props ----

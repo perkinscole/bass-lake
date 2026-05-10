@@ -68,6 +68,7 @@
 
   <!-- Reopen-menu button — visible on all platforms (desktop also has ESC) -->
   <button id="menu-btn" title="Menu (Esc)">☰</button>
+  <button id="mute-btn" title="Mute / unmute">🔊</button>
 
   <!-- Touch controls (visible only on coarse-pointer / touch devices) -->
   <div id="touch-ui">
@@ -497,6 +498,25 @@
     /* On mobile the joystick lives bottom-left; move the menu button to top-right */
     @media (pointer: coarse), (max-width: 720px) {
       #menu-btn { top: 12px; left: 12px; bottom: auto; }
+    }
+
+    #mute-btn {
+      position: fixed;
+      bottom: 12px; left: 56px;
+      width: 36px; height: 36px;
+      background: rgba(20, 35, 30, 0.7);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 8px;
+      font: 16px/1 -apple-system, system-ui, sans-serif;
+      cursor: pointer;
+      z-index: 10;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #mute-btn:hover { background: rgba(255, 220, 130, 0.18); }
+    @media (pointer: coarse), (max-width: 720px) {
+      #mute-btn { top: 12px; left: 56px; bottom: auto; }
     }
 
     /* ---- FIGHT UI ---- */
