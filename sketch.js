@@ -65,6 +65,18 @@ const STATIC_SCALE = 0.5;
 let speciesPortraits = {};
 let menuOpen = true;     // game ignores input while menu is up
 
+// ---- SONAR ----
+let sonarCtx = null;
+let sonarW = 280, sonarH = 80;
+const SONAR_RANGE = 280;          // world-pixel scan radius around the kayak
+const SONAR_BG = '#0a1813';
+const SONAR_SPECIES_COLOR = {
+  bluegill:    '#7fc88a',
+  pumpkinseed: '#f0b260',
+  crappie:     '#dde3e5',
+  bass:        '#ff7e5f',
+};
+
 const NUM_PANFISH = 220;
 const NUM_BASS = 9;
 
@@ -180,6 +192,7 @@ function setup() {
   buildStaticImage();
   buildSpeciesPortraits();
   populateMenuFlyGrid();
+  initSonar();
   let btn = document.getElementById('start-button');
   if (btn) btn.addEventListener('click', () => {
     document.getElementById('menu').classList.add('hidden');
@@ -292,6 +305,73 @@ function initTouchControls() {
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => {
     castBtn.addEventListener(evt, endCast);
   });
+}
+
+function initSonar() {
+  let canvas = document.getElementById('sonar-canvas');
+  if (!canvas) return;
+  // Match the canvas backing buffer to its CSS size so scrolling stays crisp
+  let cssW = canvas.clientWidth || canvas.width;
+  let cssH = canvas.clientHeight || canvas.height;
+  canvas.width = cssW;
+  canvas.height = cssH;
+  sonarW = cssW;
+  sonarH = cssH;
+  sonarCtx = canvas.getContext('2d');
+  sonarCtx.imageSmoothingEnabled = false;
+  // Initial fill
+  sonarCtx.fillStyle = SONAR_BG;
+  sonarCtx.fillRect(0, 0, sonarW, sonarH);
+  // Faint horizontal mid-line as depth reference
+  sonarCtx.fillStyle = 'rgba(255, 220, 130, 0.08)';
+  sonarCtx.fillRect(0, Math.floor(sonarH / 2), sonarW, 1);
+}
+
+function updateSonar() {
+  if (!sonarCtx || menuOpen) return;
+  // Scroll the existing display left by 1px (drawImage source-self with offset)
+  sonarCtx.drawImage(sonarCtx.canvas, -1, 0);
+  // Repaint the rightmost column with fresh data
+  let xCol = sonarW - 1;
+  sonarCtx.fillStyle = SONAR_BG;
+  sonarCtx.fillRect(xCol, 0, 1, sonarH);
+
+  // Bottom contour — derived from local lake depth so the bottom rises near
+  // shore and dips in basins, like a real sonar trace.
+  let lakeDepth = lake.depthAt(player.pos.x, player.pos.y);   // 0 (shore) → 1 (basin)
+  let bottomY = Math.floor(2 + lakeDepth * (sonarH - 4));
+  // shade from the bottom down to make a "ground" band
+  sonarCtx.fillStyle = 'rgba(120, 90, 50, 0.55)';
+  sonarCtx.fillRect(xCol, bottomY, 1, sonarH - bottomY);
+  sonarCtx.fillStyle = 'rgba(180, 140, 80, 0.85)';
+  sonarCtx.fillRect(xCol, bottomY, 1, 1);
+
+  // Faint mid-line so depth is readable
+  sonarCtx.fillStyle = 'rgba(255, 220, 130, 0.08)';
+  sonarCtx.fillRect(xCol, Math.floor(sonarH / 2), 1, 1);
+
+  // Plot fish within scan radius — bigger, brighter blips for closer / larger fish
+  let scanR2 = SONAR_RANGE * SONAR_RANGE;
+  let plot = (f, isBass) => {
+    let dx = f.pos.x - player.pos.x;
+    let dy = f.pos.y - player.pos.y;
+    let d2 = dx * dx + dy * dy;
+    if (d2 > scanR2) return;
+    let z = Math.max(0, Math.min(1, f.z != null ? f.z : 0.4));
+    // map fish's own depth (0..1) to the screen Y, but cap at the bottom contour
+    let y = Math.floor(2 + z * (sonarH - 4));
+    if (y > bottomY - 1) y = bottomY - 1;
+    let color = SONAR_SPECIES_COLOR[f.species] || '#9c9';
+    let size = isBass ? 3 : 2;
+    sonarCtx.fillStyle = color;
+    sonarCtx.fillRect(xCol - (size - 1), y - Math.floor(size / 2), size, size);
+  };
+  for (let f of panfish) plot(f, false);
+  for (let b of bass)   plot(b, true);
+
+  // Right-edge "now" indicator — a thin yellow line
+  sonarCtx.fillStyle = 'rgba(255, 230, 130, 0.35)';
+  sonarCtx.fillRect(xCol, 0, 1, sonarH);
 }
 
 function populateMenuFlyGrid() {
@@ -589,6 +669,9 @@ function draw() {
         `crappie ${catchCount.crappie}  ·  bass ${catchCount.bass}`;
     }
   }
+  // Sonar — scroll one column per frame
+  updateSonar();
+
   // Fight UI bars
   let fightUI = document.getElementById('fight-ui');
   if (fightUI) {

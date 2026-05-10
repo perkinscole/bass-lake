@@ -42,6 +42,15 @@
   </div>
   <div id="catch-toast"></div>
 
+  <!-- Sonar / fish finder — side-view depth display, scrolls right-to-left -->
+  <div id="sonar">
+    <div class="sonar-header">
+      <span class="sonar-title">SONAR</span>
+      <span class="sonar-range">RANGE 250FT</span>
+    </div>
+    <canvas id="sonar-canvas" width="280" height="80"></canvas>
+  </div>
+
   <!-- Fight UI: visible while a fish is on the line -->
   <div id="fight-ui" class="hidden">
     <div class="bar-row">
@@ -251,10 +260,10 @@
     #touch-ui { display: none; }
     @media (pointer: coarse), (max-width: 720px) {
       #touch-ui { display: block; }
-      /* Hide the verbose desktop hint on touch */
       #hud-controls { display: none; }
-      /* Make HUD smaller on phone */
-      #hud { font-size: 11px; max-width: 60%; }
+      /* Mobile fly text duplicates the fly buttons; keep just the catch counter */
+      #hud-fly { display: none; }
+      #hud { font-size: 11px; max-width: 50%; }
     }
     #touch-ui {
       position: fixed; inset: 0;
@@ -383,6 +392,42 @@
       color: rgba(255, 220, 130, 0.85);
       font: italic 11px/1.3 -apple-system, system-ui, sans-serif;
       text-align: center;
+    }
+
+    /* ---- SONAR ---- */
+    #sonar {
+      position: fixed;
+      top: 8px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 22, 18, 0.85);
+      border: 1px solid rgba(255, 220, 130, 0.45);
+      border-radius: 6px;
+      padding: 5px 7px 6px 7px;
+      z-index: 9;
+      pointer-events: none;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #sonar .sonar-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      color: rgba(255, 220, 130, 0.85);
+      font: 700 9px/1 'SF Mono', Menlo, monospace;
+      letter-spacing: 1.5px;
+      margin-bottom: 4px;
+    }
+    #sonar .sonar-range { font-weight: 400; opacity: 0.75; }
+    #sonar canvas {
+      display: block;
+      background: #0a1813;
+      border: 1px solid rgba(255, 220, 130, 0.2);
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+    @media (pointer: coarse), (max-width: 720px) {
+      #sonar { top: 6px; }
+      #sonar canvas { width: 200px; height: 56px; }
     }
 
     #miss-toast {
