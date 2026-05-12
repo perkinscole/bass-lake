@@ -998,7 +998,10 @@ function draw() {
     let toast = document.getElementById('miss-toast');
     if (toast) {
       if (age < 150) {
-        toast.textContent = lastMissToast.reason === 'snap' ? 'Line snapped!' : 'Got away!';
+        let msg = 'Got away!';
+        if (lastMissToast.reason === 'snap') msg = 'Line snapped!';
+        else if (lastMissToast.reason === 'slip') msg = 'Hook slipped!';
+        toast.textContent = msg;
         toast.style.opacity = age < 110 ? '1' : `${(150 - age) / 40}`;
       } else {
         toast.style.opacity = '0';
@@ -2664,17 +2667,56 @@ class Eagle {
     translate(this.pos.x, this.pos.y);
     rotate(this.angle);
     let s = this.size * (1.4 - this.altitude * 0.5);
+    // Soaring/gliding pose: wings barely flap, mostly held wide.
     let flap = (Math.sin(this.flapPhase) + 1) / 2;
-    let wingSpan = s * (2.0 + flap * 0.6);
-    let wingDepth = s * (0.7 + flap * 0.3);
+    let wingSpan = s * (3.2 + flap * 0.4);     // much wider than before
+    let wingDepth = s * (1.05 + flap * 0.18);  // and a touch deeper front-to-back
 
     noStroke();
     fill(38, 28, 22);
-    triangle(-s * 0.1,  0, -wingSpan * 0.55, -wingDepth, s * 0.25, -s * 0.2);
-    triangle(-s * 0.1,  0, -wingSpan * 0.55,  wingDepth, s * 0.25,  s * 0.2);
-    fill(70, 55, 40);
-    triangle(-s * 0.1,  0, -wingSpan * 0.4,  -wingDepth * 0.85, s * 0.1, -s * 0.15);
-    triangle(-s * 0.1,  0, -wingSpan * 0.4,   wingDepth * 0.85, s * 0.1,  s * 0.15);
+    // Left wing — curved leading and trailing edges so it reads as a glide,
+    // tapering smoothly to a rounded tip rather than a sharp point.
+    beginShape();
+    vertex( s * 0.25, -s * 0.20);                       // wing root (leading)
+    quadraticVertex(-s * 0.10, -wingDepth * 0.85,
+                    -wingSpan * 0.50, -wingDepth * 0.55); // tip
+    quadraticVertex(-s * 0.40, -wingDepth * 0.20,
+                    -s * 0.10,  0);                       // wing root (trailing)
+    endShape(CLOSE);
+    // Right wing — mirrored
+    beginShape();
+    vertex( s * 0.25,  s * 0.20);
+    quadraticVertex(-s * 0.10,  wingDepth * 0.85,
+                    -wingSpan * 0.50,  wingDepth * 0.55);
+    quadraticVertex(-s * 0.40,  wingDepth * 0.20,
+                    -s * 0.10,  0);
+    endShape(CLOSE);
+    // Feathered highlight band along the leading edge
+    fill(85, 65, 45);
+    beginShape();
+    vertex( s * 0.22, -s * 0.18);
+    quadraticVertex(-s * 0.05, -wingDepth * 0.55,
+                    -wingSpan * 0.35, -wingDepth * 0.42);
+    quadraticVertex(-s * 0.05, -wingDepth * 0.25,
+                    s * 0.20, -s * 0.10);
+    endShape(CLOSE);
+    beginShape();
+    vertex( s * 0.22,  s * 0.18);
+    quadraticVertex(-s * 0.05,  wingDepth * 0.55,
+                    -wingSpan * 0.35,  wingDepth * 0.42);
+    quadraticVertex(-s * 0.05,  wingDepth * 0.25,
+                    s * 0.20,  s * 0.10);
+    endShape(CLOSE);
+    // Wingtip "fingers" — a few separated dark feathers at each tip so the
+    // outline reads as primaries fanned out, not a hard point.
+    fill(28, 20, 16);
+    for (let i = 0; i < 4; i++) {
+      let t = i / 3;
+      let tipX = lerp(-wingSpan * 0.42, -wingSpan * 0.55, t);
+      let tipY = lerp(-wingDepth * 0.32, -wingDepth * 0.62, t);
+      ellipse(tipX, tipY, s * 0.18, s * 0.07);
+      ellipse(tipX, -tipY, s * 0.18, s * 0.07);
+    }
 
     fill(38, 28, 22);
     ellipse(0, 0, s * 1.3, s * 0.55);
@@ -2733,6 +2775,7 @@ class FlyCast {
     this.runTimer = 0;                     // frames remaining in a fish run
     this.runCooldown = 0;                  // frames before another run can start
     this.runDir = { x: 0, y: 0 };          // direction the current run is pulling
+    this.slackTimer = 0;                   // frames the line has been ~slack
   }
 
   _rodTip() {
@@ -2878,6 +2921,14 @@ class FlyCast {
         this._onLineSnap();
         return;
       }
+      // Hook slip — if the line stays slack the fish throws the hook.
+      // A live fish needs constant pressure; failing to play it means losing it.
+      if (this.tension < 0.06) this.slackTimer++;
+      else this.slackTimer = Math.max(0, this.slackTimer - 2);
+      if (this.slackTimer > 105) {
+        this._onHookSlip();
+        return;
+      }
       let dToRodNew = Math.hypot(r.x - this.flyX, r.y - this.flyY);
       // landed: fish is close AND played out (mostly tired)
       if (dToRodNew < 24 && this.fishStamina < 0.55) {
@@ -3015,6 +3066,18 @@ class FlyCast {
     ripples.push(new Ripple(this.flyX, this.flyY, 22));
     lastMissToast = { reason: 'snap', time: frameCount };
     playSound('snap');
+    stopLoop('reel_loop');
+    this.state = 'done';
+  }
+
+  _onHookSlip() {
+    // Line went slack too long — the fish shook the hook free.
+    if (this.hookedFish) {
+      this.hookedFish.hooked = false;
+      this.hookedFish = null;
+    }
+    ripples.push(new Ripple(this.flyX, this.flyY, 16));
+    lastMissToast = { reason: 'slip', time: frameCount };
     stopLoop('reel_loop');
     this.state = 'done';
   }
