@@ -342,11 +342,21 @@ function setup() {
     });
   }
 
-  // Ducks — small flotilla drifting around the lake. A few small flocks near
-  // the shoreline plus a couple of loners in open water.
-  for (let i = 0; i < 14; i++) {
-    let p = lake.randomInteriorPoint();
-    ducks.push(new Duck(p.x, p.y));
+  // Ducks — three pairs hugging the shoreline (mallards usually loaf in pairs)
+  for (let i = 0; i < 3; i++) {
+    let anchor = lake.randomEdgePoint(random(0.87, 0.93));
+    if (!lake.contains(anchor.x, anchor.y, 14)) continue;
+    let h = random(TWO_PI);
+    let a = new Duck(anchor.x, anchor.y);
+    a.heading = a.targetHeading = h;
+    let off = random(TWO_PI);
+    let bx = anchor.x + Math.cos(off) * 32;
+    let by = anchor.y + Math.sin(off) * 32;
+    let b = new Duck(bx, by);
+    b.heading = b.targetHeading = h;
+    // pair them so they flush together
+    a.mate = b; b.mate = a;
+    ducks.push(a, b);
   }
 
   // Spawn panfish AFTER habitat structures so each species can pick its preferred target.
@@ -2314,16 +2324,77 @@ class Duck {
     this.pos = createVector(x, y);
     this.heading = random(TWO_PI);
     this.targetHeading = this.heading;
-    this.size = random(14, 18);             // bigger so they read against the water
+    this.size = random(14, 18);
     this.male = random() < 0.55;
     this.dabble = 0;
     this.dabbleTimer = 0;
     this.dirTimer = floor(random(120, 360));
     this.bobPhase = random(TWO_PI);
     this.colorSeed = random(1000);
+    // state machine
+    this.state = 'floating';                // 'floating' | 'flushing' | 'flying' | 'gone'
+    this.altitude = 0;                       // 0 = on water, 1 = high in sky
+    this.flushTimer = 0;
+    this.respawnTimer = 0;
+    this.mate = null;                        // sibling duck — flushes together
+    this.flapPhase = random(TWO_PI);
+  }
+
+  flush() {
+    if (this.state !== 'floating') return;
+    this.state = 'flushing';
+    this.flushTimer = 22;
+    // fly away from the kayak
+    this.heading = Math.atan2(this.pos.y - player.pos.y, this.pos.x - player.pos.x);
+    this.targetHeading = this.heading;
+    // mate flushes too, with a tiny delay to look natural
+    if (this.mate && this.mate.state === 'floating') {
+      let m = this.mate;
+      setTimeout(() => { if (m && m.state === 'floating') m.flush(); }, 120);
+    }
   }
 
   update() {
+    if (this.state === 'gone') {
+      // wait then respawn at a fresh shoreline spot
+      this.respawnTimer--;
+      if (this.respawnTimer <= 0) this._respawn();
+      return;
+    }
+    if (this.state === 'flying') {
+      this.altitude = lerp(this.altitude, 1, 0.04);
+      this.flapPhase += 0.45;
+      let sp = 5.5;
+      this.pos.x += Math.cos(this.heading) * sp;
+      this.pos.y += Math.sin(this.heading) * sp;
+      if (this.pos.x < -120 || this.pos.x > WORLD_W + 120 ||
+          this.pos.y < -120 || this.pos.y > WORLD_H + 120) {
+        this.state = 'gone';
+        this.respawnTimer = 600 + floor(random(900));
+      }
+      return;
+    }
+    if (this.state === 'flushing') {
+      this.altitude = lerp(this.altitude, 0.35, 0.18);
+      this.flapPhase += 0.4;
+      this.flushTimer--;
+      // already moving away
+      let sp = 2.0 + (22 - this.flushTimer) * 0.18;
+      this.pos.x += Math.cos(this.heading) * sp;
+      this.pos.y += Math.sin(this.heading) * sp;
+      if (this.flushTimer <= 0) this.state = 'flying';
+      return;
+    }
+
+    // ---- floating ----
+    // Flush if the kayak gets too close
+    let dpx = player.pos.x - this.pos.x, dpy = player.pos.y - this.pos.y;
+    if (dpx * dpx + dpy * dpy < 95 * 95) {
+      this.flush();
+      ripples.push(new Ripple(this.pos.x, this.pos.y, 18));
+      return;
+    }
+
     this.dirTimer--;
     if (this.dirTimer <= 0) {
       this.targetHeading = this.heading + random(-PI * 0.7, PI * 0.7);
@@ -2355,11 +2426,70 @@ class Duck {
     this.bobPhase += 0.04;
   }
 
+  _respawn() {
+    // come back at a random shoreline point far from the kayak
+    for (let i = 0; i < 30; i++) {
+      let p = lake.randomEdgePoint(random(0.85, 0.95));
+      let d2 = (p.x - player.pos.x) ** 2 + (p.y - player.pos.y) ** 2;
+      if (d2 > 600 * 600 && lake.contains(p.x, p.y, 14)) {
+        this.pos.x = p.x; this.pos.y = p.y;
+        this.state = 'floating';
+        this.altitude = 0;
+        this.heading = this.targetHeading = random(TWO_PI);
+        this.dirTimer = floor(random(120, 360));
+        return;
+      }
+    }
+    // fallback: somewhere random
+    let p = lake.randomInteriorPoint();
+    this.pos.x = p.x; this.pos.y = p.y;
+    this.state = 'floating';
+    this.altitude = 0;
+  }
+
   draw() {
+    if (this.state === 'gone') return;
     push();
     translate(this.pos.x, this.pos.y);
     rotate(this.heading);
     let s = this.size;
+
+    // ---- FLYING / FLUSHING form: viewed top-down with wings spread ----
+    if (this.state === 'flying' || this.state === 'flushing') {
+      // shadow on water — slides ahead as the bird gains altitude
+      let alt = this.altitude;
+      let shadowOff = alt * 22;
+      let shadowAlpha = 70 * (1 - alt * 0.6);
+      noStroke();
+      fill(0, 0, 0, shadowAlpha);
+      ellipse(shadowOff * 0.5, shadowOff * 0.7, s * 1.4 * (1.4 - alt * 0.5), s * 0.5 * (1.4 - alt * 0.5));
+
+      let bs = s * (1.2 - alt * 0.3);            // bird scales down with height a bit
+      let flap = (Math.sin(this.flapPhase) + 1) / 2;
+      let wingSpan = bs * (2.0 + flap * 0.7);
+      let wingDepth = bs * (0.85 + flap * 0.4);
+      // wings
+      fill(80, 65, 45);
+      triangle(-bs * 0.1, 0, -wingSpan * 0.5, -wingDepth, bs * 0.3, -bs * 0.15);
+      triangle(-bs * 0.1, 0, -wingSpan * 0.5,  wingDepth, bs * 0.3,  bs * 0.15);
+      // wing edge highlight
+      fill(140, 115, 80);
+      triangle(-bs * 0.1, 0, -wingSpan * 0.38, -wingDepth * 0.8, bs * 0.1, -bs * 0.1);
+      triangle(-bs * 0.1, 0, -wingSpan * 0.38,  wingDepth * 0.8, bs * 0.1,  bs * 0.1);
+      // body — torpedo
+      fill(110, 90, 60);
+      ellipse(0, 0, bs * 1.3, bs * 0.45);
+      // head (small) — green or brown
+      if (this.male) fill(40, 130, 70);
+      else           fill(120, 95, 60);
+      ellipse(bs * 0.55, 0, bs * 0.35, bs * 0.3);
+      // bill
+      fill(235, 195, 75);
+      triangle(bs * 0.78, 0, bs * 0.9, -bs * 0.05, bs * 0.9, bs * 0.05);
+      pop();
+      return;
+    }
+
     let bob = Math.sin(this.bobPhase) * 0.4;
     let bodyShrink = 1 - this.dabble * 0.35;
     let bw = s * 2.0 * bodyShrink;
