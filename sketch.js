@@ -2565,7 +2565,9 @@ class Eagle {
     this.lifetime = 0;
     this.size = 30;
     this.speed = 4.5;
-    this.flapPhase = random(TWO_PI);
+    this.flapPhase = 0;
+    this.flapMode = 'gliding';            // 'gliding' | 'flapping' | 'tucked'
+    this.flapModeTimer = floor(random(60, 200));
     this.screeched = false;
   }
 
@@ -2586,7 +2588,27 @@ class Eagle {
 
   update() {
     this.lifetime++;
-    this.flapPhase += 0.18;
+    this.flapPhase += 0.31;     // ~3 beats per second during a flap burst
+
+    // Wing mode: tucked while diving, continuous flapping while climbing,
+    // and a glide/flap-burst cycle otherwise so the eagle reads as soaring.
+    if (this.state === 'diving') {
+      this.flapMode = 'tucked';
+    } else if (this.state === 'rising') {
+      this.flapMode = 'flapping';
+    } else {
+      this.flapModeTimer--;
+      if (this.flapModeTimer <= 0) {
+        if (this.flapMode === 'gliding') {
+          this.flapMode = 'flapping';
+          this.flapModeTimer = 60;          // ~3 wing beats
+          this.flapPhase = 0;
+        } else {
+          this.flapMode = 'gliding';
+          this.flapModeTimer = floor(random(120, 280));  // 2-4.5s glide
+        }
+      }
+    }
 
     if (this.state === 'soaring') {
       this.altitude = lerp(this.altitude, 0.85, 0.02);
@@ -2667,10 +2689,12 @@ class Eagle {
     translate(this.pos.x, this.pos.y);
     rotate(this.angle);
     let s = this.size * (1.4 - this.altitude * 0.5);
-    // Soaring/gliding pose: wings barely flap, mostly held wide.
-    let flap = (Math.sin(this.flapPhase) + 1) / 2;
-    let wingSpan = s * (3.2 + flap * 0.4);     // much wider than before
-    let wingDepth = s * (1.05 + flap * 0.18);  // and a touch deeper front-to-back
+    // sin(phase) is the beat — positive = downstroke (wing flat, broad
+    // from above), negative = upstroke (wing tilted up, narrower).
+    let beat = (this.flapMode === 'flapping') ? Math.sin(this.flapPhase) : 0;
+    let tuck = (this.flapMode === 'tucked') ? 0.55 : 1.0;   // diving stoop
+    let wingSpan  = s * (3.2 + beat * 0.30) * tuck;
+    let wingDepth = s * (1.05 + beat * 0.40) * tuck;
 
     noStroke();
     fill(38, 28, 22);
