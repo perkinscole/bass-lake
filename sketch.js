@@ -11,6 +11,9 @@ let trees = [];
 let logs = [];
 let cattails = [];
 let rocks = [];
+let ducks = [];                       // surface birds, drift around the lake
+let eagle = null;                     // active bald eagle, null when none
+let eagleSpawnCooldown = 1200;        // frames until next eagle attempt
 let player;        // the kayak the user controls
 let cast = null;   // active fly cast (null when not cast)
 let MAX_CAST_RANGE = 220;       // current cast range (depends on rod tier)
@@ -158,6 +161,7 @@ const SOUND_FILES = {
   snap:          'sounds/snap.mp3',                 // line breaks
   paddle:        'sounds/paddle.mp3',               // paddle stroke in water
   buy:           'sounds/buy.mp3',                  // shop purchase
+  eagle:         'sounds/eagle.mp3',                // eagle screech during dive
   // Ambient layers — quietly blended together while you're playing
   ambient:       'sounds/naturebackground.mp3',     // main nature bed
   ambient_birds: 'sounds/bird sounds.mp3',          // bird chirps layer
@@ -336,6 +340,13 @@ function setup() {
       r: random(6, 18),
       shade: 60 + random(-20, 30),
     });
+  }
+
+  // Ducks — small flotilla drifting around the lake. A few small flocks near
+  // the shoreline plus a couple of loners in open water.
+  for (let i = 0; i < 14; i++) {
+    let p = lake.randomInteriorPoint();
+    ducks.push(new Duck(p.x, p.y));
   }
 
   // Spawn panfish AFTER habitat structures so each species can pick its preferred target.
@@ -882,6 +893,15 @@ function draw() {
     if (inView(b.pos.x, b.pos.y, 60)) b.draw();
   }
 
+  // Ducks — drift on the surface above the fish but under lily pads
+  for (let d of ducks) {
+    d.update();
+    if (inView(d.pos.x, d.pos.y, 40)) d.draw();
+  }
+
+  // Eagle shadow on water — drawn under lily pads so pads cast above it
+  if (eagle) eagle.drawShadow();
+
   // lily pads on top so fish appear to swim under them
   for (let lp of lilypads) { if (inView(lp.x, lp.y, lp.r * 1.5)) drawLilypad(lp); }
 
@@ -907,6 +927,22 @@ function draw() {
     line(wx - 5, wy, wx + 5, wy);
     line(wx, wy - 5, wx, wy + 5);
     noStroke();
+  }
+
+  // Eagle body — drawn last so it flies above everything in the world.
+  // Spawn one occasionally when none is active.
+  if (eagle) {
+    eagle.update();
+    eagle.draw();
+    if (eagle.state === 'done') {
+      eagle = null;
+      eagleSpawnCooldown = 1800 + floor(random(1800));   // 30-60 s of quiet
+    }
+  } else {
+    eagleSpawnCooldown--;
+    if (eagleSpawnCooldown <= 0 && !menuOpen) {
+      eagle = new Eagle();
+    }
   }
 
   pop();
@@ -2268,6 +2304,272 @@ class Kayak {
       ellipse(sx + random(-3, 3), sy + random(-3, 3), 3, 3);
     }
 
+    pop();
+  }
+}
+
+// ---------- DUCKS ----------
+class Duck {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.heading = random(TWO_PI);
+    this.targetHeading = this.heading;
+    this.size = random(14, 18);             // bigger so they read against the water
+    this.male = random() < 0.55;
+    this.dabble = 0;
+    this.dabbleTimer = 0;
+    this.dirTimer = floor(random(120, 360));
+    this.bobPhase = random(TWO_PI);
+    this.colorSeed = random(1000);
+  }
+
+  update() {
+    this.dirTimer--;
+    if (this.dirTimer <= 0) {
+      this.targetHeading = this.heading + random(-PI * 0.7, PI * 0.7);
+      this.dirTimer = floor(random(120, 360));
+    }
+    let dh = this.targetHeading - this.heading;
+    while (dh >  PI) dh -= TWO_PI;
+    while (dh < -PI) dh += TWO_PI;
+    this.heading += dh * 0.02;
+    let speed = 0.32 * (1 - this.dabble * 0.8);
+    this.pos.x += Math.cos(this.heading) * speed;
+    this.pos.y += Math.sin(this.heading) * speed;
+    if (this.dabbleTimer <= 0 && random() < 0.0015) this.dabbleTimer = 70;
+    if (this.dabbleTimer > 0) {
+      this.dabbleTimer--;
+      this.dabble = lerp(this.dabble, 1, 0.1);
+      if (this.dabbleTimer === 35) ripples.push(new Ripple(this.pos.x, this.pos.y, 10));
+    } else {
+      this.dabble = lerp(this.dabble, 0, 0.1);
+    }
+    let inAmt = lake.insideAmount(this.pos.x, this.pos.y);
+    if (inAmt < 16) {
+      let inward = lake.inwardNormal(this.pos.x, this.pos.y);
+      let pen = max(0, 16 - inAmt);
+      this.pos.x += inward.x * pen;
+      this.pos.y += inward.y * pen;
+      this.targetHeading = Math.atan2(inward.y, inward.x);
+    }
+    this.bobPhase += 0.04;
+  }
+
+  draw() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.heading);
+    let s = this.size;
+    let bob = Math.sin(this.bobPhase) * 0.4;
+    let bodyShrink = 1 - this.dabble * 0.35;
+    let bw = s * 2.0 * bodyShrink;
+    let bh = s * 1.2 * bodyShrink;
+
+    noStroke();
+    fill(0, 0, 0, 60);
+    ellipse(1, 2 + bob, bw * 1.05, bh * 0.85);
+
+    // body — warm mid-brown, lighter than the water so it pops
+    fill(140, 110, 75);
+    ellipse(-s * 0.05, bob, bw, bh);
+    // belly hint along the sides
+    fill(195, 165, 120);
+    ellipse(-s * 0.1, bob, bw * 0.75, bh * 0.55);
+    // dark scapular stripe along the back (subtle definition)
+    fill(60, 45, 30, 220);
+    ellipse(-s * 0.15, bob, bw * 0.85, bh * 0.18);
+
+    let headFade = 1 - this.dabble;
+    if (headFade > 0.05) {
+      let headX = s * 0.85;
+      // neck — yellow-brown
+      fill(155, 125, 80, 255 * headFade);
+      ellipse((s * 0.55 + headX) / 2, bob, s * 0.4, s * 0.32);
+      // head — bright iridescent green for drakes, rich brown for hens
+      if (this.male) fill(40, 130, 70, 255 * headFade);
+      else           fill(120, 95, 60, 255 * headFade);
+      ellipse(headX, bob, s * 0.6, s * 0.55);
+      // white neck ring (drake only)
+      if (this.male) {
+        fill(245, 240, 230, 255 * headFade);
+        ellipse(headX - s * 0.3, bob, s * 0.18, s * 0.32);
+      }
+      // bill — bright yellow
+      fill(235, 195, 75, 255 * headFade);
+      ellipse(headX + s * 0.35, bob, s * 0.34, s * 0.2);
+      // eye
+      fill(20, 18, 14, 255 * headFade);
+      ellipse(headX + s * 0.04, bob - s * 0.14, s * 0.09);
+    }
+
+    if (this.dabble < 0.4) {
+      noFill();
+      stroke(220, 235, 245, 90);
+      strokeWeight(0.6);
+      line(-bw * 0.5, -3, -bw * 0.95, -7);
+      line(-bw * 0.5,  3, -bw * 0.95,  7);
+      noStroke();
+    }
+    pop();
+  }
+}
+
+// ---------- BALD EAGLE ----------
+class Eagle {
+  constructor() {
+    this.state = 'soaring';
+    let edge = floor(random(4));
+    if (edge === 0)      { this.pos = createVector(random(WORLD_W), -120); }
+    else if (edge === 1) { this.pos = createVector(WORLD_W + 120, random(WORLD_H)); }
+    else if (edge === 2) { this.pos = createVector(random(WORLD_W), WORLD_H + 120); }
+    else                 { this.pos = createVector(-120, random(WORLD_H)); }
+    let toCenter = Math.atan2(WORLD_H/2 - this.pos.y, WORLD_W/2 - this.pos.x);
+    this.angle = toCenter;
+    this.altitude = 1.0;
+    this.target = null;
+    this.carryFish = null;
+    this.carryFishSpecies = null;
+    this.lifetime = 0;
+    this.size = 30;
+    this.speed = 4.5;
+    this.flapPhase = random(TWO_PI);
+    this.screeched = false;
+  }
+
+  _pickTarget() {
+    let candidates = [];
+    for (let b of bass) {
+      if (!b.hooked && b.z < 0.35) candidates.push(b);
+    }
+    for (let f of panfish) {
+      if (!f.hooked && f.z < 0.18) candidates.push(f);
+    }
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) =>
+      Math.hypot(a.pos.x - this.pos.x, a.pos.y - this.pos.y) -
+      Math.hypot(b.pos.x - this.pos.x, b.pos.y - this.pos.y));
+    return candidates[Math.min(floor(random(2)), candidates.length - 1)];
+  }
+
+  update() {
+    this.lifetime++;
+    this.flapPhase += 0.18;
+
+    if (this.state === 'soaring') {
+      this.altitude = lerp(this.altitude, 0.85, 0.02);
+      if (!this.target) this.target = this._pickTarget();
+      if (this.target) {
+        let dx = this.target.pos.x - this.pos.x;
+        let dy = this.target.pos.y - this.pos.y;
+        let d = Math.hypot(dx, dy);
+        this.angle = Math.atan2(dy, dx);
+        if (d < 90) this.state = 'diving';
+        else {
+          this.pos.x += (dx / d) * this.speed;
+          this.pos.y += (dy / d) * this.speed;
+        }
+      } else {
+        this.pos.x += Math.cos(this.angle) * this.speed;
+        this.pos.y += Math.sin(this.angle) * this.speed;
+        if (this.lifetime > 480) this.state = 'leaving';
+      }
+    } else if (this.state === 'diving') {
+      if (!this.screeched) { playSound('eagle', { volume: 0.7 }); this.screeched = true; }
+      this.altitude = lerp(this.altitude, 0.05, 0.12);
+      if (!this.target || this.target.hooked || (panfish.indexOf(this.target) < 0 && bass.indexOf(this.target) < 0)) {
+        this.state = 'rising';
+      } else {
+        let dx = this.target.pos.x - this.pos.x;
+        let dy = this.target.pos.y - this.pos.y;
+        let d = Math.hypot(dx, dy);
+        this.angle = Math.atan2(dy, dx);
+        if (d < 12) {
+          this.carryFish = this.target;
+          this.carryFishSpecies = this.target.species;
+          let idx = panfish.indexOf(this.target);
+          if (idx >= 0) panfish.splice(idx, 1);
+          else {
+            let bidx = bass.indexOf(this.target);
+            if (bidx >= 0) bass.splice(bidx, 1);
+          }
+          this.target = null;
+          ripples.push(new Ripple(this.pos.x, this.pos.y, 44));
+          ripples.push(new Ripple(this.pos.x, this.pos.y, 22));
+          for (let i = 0; i < 8; i++) bubbles.push(new Bubble(this.pos.x, this.pos.y));
+          playSound('splash', { volume: 0.85 });
+          this.state = 'rising';
+        } else {
+          this.pos.x += (dx / d) * this.speed * 1.6;
+          this.pos.y += (dy / d) * this.speed * 1.6;
+        }
+      }
+    } else if (this.state === 'rising') {
+      this.altitude = lerp(this.altitude, 1.0, 0.05);
+      this.pos.x += Math.cos(this.angle) * this.speed;
+      this.pos.y += Math.sin(this.angle) * this.speed;
+      if (this.altitude > 0.85) this.state = 'leaving';
+    } else if (this.state === 'leaving') {
+      this.pos.x += Math.cos(this.angle) * this.speed;
+      this.pos.y += Math.sin(this.angle) * this.speed;
+      if (this.pos.x < -200 || this.pos.x > WORLD_W + 200 ||
+          this.pos.y < -200 || this.pos.y > WORLD_H + 200) {
+        this.state = 'done';
+      }
+    }
+  }
+
+  drawShadow() {
+    if (this.state === 'done') return;
+    let off = this.altitude * 28;
+    let alpha = 90 * (1 - this.altitude * 0.55);
+    let sz = this.size * (1.5 - this.altitude * 0.5);
+    noStroke();
+    fill(0, 0, 0, alpha);
+    ellipse(this.pos.x + off * 0.5, this.pos.y + off * 0.7, sz, sz * 0.45);
+  }
+
+  draw() {
+    if (this.state === 'done') return;
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.angle);
+    let s = this.size * (1.4 - this.altitude * 0.5);
+    let flap = (Math.sin(this.flapPhase) + 1) / 2;
+    let wingSpan = s * (2.0 + flap * 0.6);
+    let wingDepth = s * (0.7 + flap * 0.3);
+
+    noStroke();
+    fill(38, 28, 22);
+    triangle(-s * 0.1,  0, -wingSpan * 0.55, -wingDepth, s * 0.25, -s * 0.2);
+    triangle(-s * 0.1,  0, -wingSpan * 0.55,  wingDepth, s * 0.25,  s * 0.2);
+    fill(70, 55, 40);
+    triangle(-s * 0.1,  0, -wingSpan * 0.4,  -wingDepth * 0.85, s * 0.1, -s * 0.15);
+    triangle(-s * 0.1,  0, -wingSpan * 0.4,   wingDepth * 0.85, s * 0.1,  s * 0.15);
+
+    fill(38, 28, 22);
+    ellipse(0, 0, s * 1.3, s * 0.55);
+
+    fill(248, 245, 235);
+    ellipse(s * 0.55, 0, s * 0.45, s * 0.38);
+    fill(225, 175, 50);
+    triangle(s * 0.78, 0, s * 0.94, -s * 0.06, s * 0.94, s * 0.06);
+    fill(20, 18, 14);
+    ellipse(s * 0.65, -s * 0.06, s * 0.06);
+
+    fill(248, 245, 235);
+    triangle(-s * 0.65, 0, -s * 1.05, -s * 0.18, -s * 1.05, s * 0.18);
+
+    if (this.carryFish && (this.state === 'rising' || this.state === 'leaving')) {
+      fill(45, 55, 40);
+      ellipse(-s * 0.05, s * 0.35, s * 0.7, s * 0.28);
+      fill(35, 45, 32);
+      triangle(-s * 0.4, s * 0.35, -s * 0.6, s * 0.17, -s * 0.6, s * 0.53);
+      stroke(220, 175, 50, 230);
+      strokeWeight(1);
+      line(0, s * 0.1, -s * 0.05, s * 0.3);
+      line(s * 0.05, s * 0.1, s * 0.0, s * 0.3);
+      noStroke();
+    }
     pop();
   }
 }
