@@ -1899,36 +1899,39 @@ const SPECIES = {
   // ---- ALPINE LAKE TROUT ----
   rainbowTrout: {
     class: 'panfish',
+    spooky: true,                                   // skittish — bigger avoid radius, splash-spooks
     sizeRange: [11, 14],
-    bodyAspect: 0.42,           // slender torpedo shape
+    bodyAspect: 0.42,
     maxSpeed: 1.35,
     maxForce: 0.034,
     sepR: 16, neighR: 50, fleeR: 110,
-    sepW: 1.4, aliW: 0.9, cohW: 0.8, fleeW: 2.6,   // less schoolish than panfish
+    sepW: 1.4, aliW: 0.9, cohW: 0.8, fleeW: 2.6,
     habitat: 'weeds',
     habitatW: 0.02,
-    depthBias: 0,                                   // any depth
+    depthBias: 0,
     schoolWith: 'rainbowTrout',
     depthAlpha: 210,
     zRange: [0.10, 0.45],
   },
   brookTrout: {
     class: 'panfish',
+    spooky: true,
     sizeRange: [9, 12],
     bodyAspect: 0.4,
     maxSpeed: 1.1,
     maxForce: 0.030,
     sepR: 18, neighR: 38, fleeR: 90,
-    sepW: 1.6, aliW: 0.6, cohW: 0.5, fleeW: 2.4,   // mostly solitary
+    sepW: 1.6, aliW: 0.6, cohW: 0.5, fleeW: 2.4,
     habitat: 'rocks',
     habitatW: 0.03,
-    depthBias: -0.0005,                             // shallows / rocks
+    depthBias: -0.0005,
     schoolWith: 'brookTrout',
     depthAlpha: 215,
     zRange: [0.05, 0.35],
   },
   cutthroatTrout: {
     class: 'bass',
+    spooky: true,
   },
 };
 
@@ -1964,6 +1967,23 @@ class Panfish {
 
   flock(panfishHash, hashCell, bass) {
     let cfg = this.cfg;
+
+    // ---- KAYAK AVOIDANCE ----
+    // All fish flee from the kayak. Spooky species (trout) have a bigger
+    // avoidance radius and react sooner. Very close = full spook (sprint
+    // away, dive deep, won't bite for a few seconds). Beyond that, fish add
+    // a gentle flee force into their flock acceleration.
+    let avoidR = cfg.spooky ? 130 : 75;
+    let panicR = cfg.spooky ? 45 : 28;
+    let kdx = this.pos.x - player.pos.x;
+    let kdy = this.pos.y - player.pos.y;
+    let kd2 = kdx * kdx + kdy * kdy;
+    if (kd2 < panicR * panicR) {
+      this.spookedUntil = frameCount + (cfg.spooky ? 200 : 120);
+      this.spookFromX = player.pos.x;
+      this.spookFromY = player.pos.y;
+    }
+
     // SPOOK: if recently startled, sprint away from the disturbance and
     // skip normal flocking + bite eligibility for a few seconds.
     if (this.spookedUntil && frameCount < this.spookedUntil) {
@@ -1974,10 +1994,18 @@ class Panfish {
       let speed = this.maxSpeed * (1.0 + burst * 1.2);
       this.vel.x = (dx / d) * speed;
       this.vel.y = (dy / d) * speed;
-      // dive a bit deeper while fleeing so we lose track of them
       this.z = Math.min(0.6, this.z + 0.01);
       this.wiggle += 0.4;
       return;
+    }
+
+    // Soft kayak-avoid force when within avoidR but not panicked
+    if (kd2 < avoidR * avoidR) {
+      let kd = Math.sqrt(kd2) || 1;
+      let strength = (avoidR - kd) / avoidR;     // 0..1
+      let away = createVector(kdx / kd, kdy / kd).mult(this.maxSpeed * 1.4);
+      away.sub(this.vel).limit(this.maxForce * 4 * strength);
+      this.acc.add(away);
     }
     let sep = createVector();
     let ali = createVector();
@@ -2251,6 +2279,21 @@ class Bass {
   update(panfish) {
     this.cooldown = max(0, this.cooldown - 1);
 
+    // KAYAK AVOIDANCE — spooky bass (cutthroat trout) react at greater
+    // distance. Plain bass have a small avoid radius (they're ambush
+    // predators that tolerate boats more than trout).
+    let cfg = SPECIES[this.species] || {};
+    let avoidR = cfg.spooky ? 110 : 55;
+    let panicR = cfg.spooky ? 40 : 24;
+    let kdx = this.pos.x - player.pos.x;
+    let kdy = this.pos.y - player.pos.y;
+    let kd2 = kdx * kdx + kdy * kdy;
+    if (kd2 < panicR * panicR) {
+      this.spookedUntil = frameCount + (cfg.spooky ? 200 : 100);
+      this.spookFromX = player.pos.x;
+      this.spookFromY = player.pos.y;
+    }
+
     // SPOOK — bolt away from a splash that landed too close
     if (this.spookedUntil && frameCount < this.spookedUntil) {
       let dx = this.pos.x - (this.spookFromX || this.pos.x);
@@ -2328,6 +2371,15 @@ class Bass {
     if (inAmt < 18) {
       let push = lake.inwardNormal(this.pos.x, this.pos.y).mult(0.6);
       this.vel.add(push);
+    }
+
+    // Soft kayak avoidance — outside of panic range, nudge velocity away
+    // from the player. Spooky species (cutthroat trout) have a bigger reach.
+    if (kd2 < avoidR * avoidR && kd2 > panicR * panicR && this.state !== 'dash') {
+      let kd = Math.sqrt(kd2) || 1;
+      let strength = (avoidR - kd) / avoidR;
+      this.vel.x += (kdx / kd) * strength * 0.6;
+      this.vel.y += (kdy / kd) * strength * 0.6;
     }
 
     this.pos.add(this.vel);
@@ -3283,18 +3335,20 @@ class FlyCast {
   }
 
   _spookNearbyFish() {
-    // Landing the fly TOO close to a fish scares it — the splash sends it
-    // bolting away and it won't bite for a few seconds.
-    const SPOOK_RADIUS = 24;
+    // Only the big sloppy presentations (wooly bugger) spook fish on landing,
+    // and only species flagged as "spooky" (trout) react. Regular bass / sunfish
+    // / crappie don't care about a heavy fly slapping the water nearby.
+    if (this.flyType !== 'woolyBugger') return;
+    const SPOOK_RADIUS = 32;
     const SPOOK_FRAMES = 240;
     let x = this.flyX, y = this.flyY;
     let spook = (f) => {
+      if (!SPECIES[f.species]?.spooky) return;
       let d2 = (f.pos.x - x) ** 2 + (f.pos.y - y) ** 2;
       if (d2 < SPOOK_RADIUS * SPOOK_RADIUS) {
         f.spookedUntil = frameCount + SPOOK_FRAMES;
         f.spookFromX = x;
         f.spookFromY = y;
-        // small ripple at the fish position as it lunges away
         if (random() < 0.6) ripples.push(new Ripple(f.pos.x, f.pos.y, 10));
       }
     };
