@@ -217,6 +217,22 @@ const STATIC_SCALE = 0.5;
 let speciesPortraits = {};
 let menuOpen = true;     // game ignores input while menu is up
 
+// ---- WIND ----
+// Wind direction follows the lake's static wind angle (so the wavelets
+// the player sees match the drift they feel). Strength wobbles slowly via
+// Perlin noise so the breeze breathes.
+let wind = { x: 0, y: 0, angle: 0, strength: 0 };
+function updateWind() {
+  if (!lake) return;
+  let t = frameCount * 0.0008;
+  let angleJitter = (noise(t, 17.3) - 0.5) * 0.5;       // ±~0.25 rad wobble
+  let strengthN   = noise(t + 100, 31.7);
+  wind.angle = lake.windAngle + angleJitter;
+  wind.strength = 0.35 + strengthN * 0.85;                // ~0.35..1.20
+  wind.x = Math.cos(wind.angle) * wind.strength;
+  wind.y = Math.sin(wind.angle) * wind.strength;
+}
+
 // ---- SOUND ----
 // Drop your audio files into /sounds/ with these filenames; missing files are
 // skipped silently so the game still runs. Use .mp3 for broadest support.
@@ -1123,7 +1139,7 @@ function draw() {
       catchEl.textContent = `Caught — ${parts.join('  ·  ')}`;
     }
   }
-  // Sonar — scroll one column per frame
+  updateWind();
   updateSonar();
 
   // Fight UI bars
@@ -2488,6 +2504,11 @@ class Kayak {
     this.vel.mult(this.friction);
     this.vel.limit(this.maxSpeed);
 
+    // Wind drift — pushes the kayak continuously even when not paddling.
+    // Scales with current wind strength; the boat slowly slides downwind.
+    this.pos.x += wind.x * 0.18;
+    this.pos.y += wind.y * 0.18;
+
     this.pos.add(this.vel);
 
     // Lake collision — soft push if hitting shore, can't enter land
@@ -3156,11 +3177,28 @@ class FlyCast {
         this._spookNearbyFish();
       }
     } else if (this.state === 'fishing') {
-      // Fly drifts a touch on the water surface
+      // Fly drifts a touch on the water surface (subtle noise wander)
       let n1 = noise(this.flyX * 0.005, this.flyY * 0.005, frameCount * 0.005 + this.driftSeed);
       let n2 = noise(this.flyX * 0.005 + 50, this.flyY * 0.005 + 50, frameCount * 0.005 + this.driftSeed);
       this.flyX += (n1 - 0.5) * 0.4;
       this.flyY += (n2 - 0.5) * 0.4;
+
+      // Wind drift on the water — fly skitters downwind
+      this.flyX += wind.x * 0.22;
+      this.flyY += wind.y * 0.22;
+
+      // Line tether — if the kayak has paddled past the line length, the
+      // line pulls the fly along. Drags surface ripples too.
+      let r = this._rodTip();
+      let dx = this.flyX - r.x, dy = this.flyY - r.y;
+      let d = Math.hypot(dx, dy);
+      if (d > this.lineLength) {
+        let pull = d - this.lineLength;
+        this.flyX -= (dx / d) * pull;
+        this.flyY -= (dy / d) * pull;
+        // small drag ripple every so often
+        if (frameCount % 8 === 0) ripples.push(new Ripple(this.flyX, this.flyY, 9));
+      }
 
       // bite check — find a catchable fish near the fly
       let prey = this._findBitingFish();
