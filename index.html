@@ -37,7 +37,10 @@
     <div id="hud-controls">
       W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly · ESC menu
     </div>
-    <div id="hud-fly">Fly: —</div>
+    <div id="hud-fly" title="Click to open the fly box (F)">
+      <span>Fly Box</span>
+      <span class="fly-hint">F</span>
+    </div>
     <div id="hud-money">$0</div>
     <div id="hud-catch">Caught: —</div>
   </div>
@@ -437,19 +440,39 @@
       cursor: pointer;
     }
 
-    /* Current fly badge in HUD — clickable */
+    /* Current fly badge in HUD — clickable button */
     #hud-fly {
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+      padding: 4px 12px 4px 6px;
+      margin-top: 4px;
+      background: rgba(40, 28, 18, 0.55);
+      border: 1px solid rgba(255, 220, 130, 0.45);
+      border-radius: 8px;
       pointer-events: auto;
+      font: 600 12px -apple-system, system-ui, sans-serif;
+      color: rgba(255, 230, 150, 0.95);
+      transition: background 0.15s ease-out, border-color 0.15s ease-out;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #hud-fly:hover {
+      background: rgba(255, 220, 130, 0.18);
+      border-color: rgba(255, 230, 150, 0.9);
     }
     #hud-fly img {
-      width: 38px;
+      width: 44px;
       height: auto;
       image-rendering: pixelated;
       vertical-align: middle;
+    }
+    #hud-fly .fly-hint {
+      opacity: 0.6;
+      margin-left: 4px;
+      font-weight: 400;
+      font-size: 10px;
     }
 
     /* ---- TACKLE SHOP ---- */

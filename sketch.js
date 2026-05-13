@@ -1294,7 +1294,7 @@ function draw() {
     let catchEl = document.getElementById('hud-catch');
     if (flyEl) {
       let icon = flyIcons[selectedFly] ? `<img src="${flyIcons[selectedFly]}" alt="">` : '';
-      flyEl.innerHTML = `${icon}<span>${FLY_CONFIG[selectedFly].label}</span><span style="opacity:0.65;margin-left:6px">(F to open fly box)</span>`;
+      flyEl.innerHTML = `${icon}<span>${FLY_CONFIG[selectedFly].label}</span><span class="fly-hint">F</span>`;
     }
     if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
     if (catchEl) {
