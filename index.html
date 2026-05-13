@@ -84,8 +84,10 @@
   </div>
   <div id="menu">
     <div class="menu-card">
-      <div class="title">Bass Lake</div>
-      <div class="tagline">fly fishing from a kayak on a procedural lake</div>
+      <div class="title" id="menu-title">Bass Lake</div>
+      <div class="tagline" id="menu-tagline">fly fishing from a kayak on a procedural lake</div>
+
+      <div class="level-group" id="level-group"><!-- populated by sketch.js --></div>
 
       <div class="fly-grid" id="fly-grid"><!-- populated by sketch.js --></div>
 
@@ -209,6 +211,50 @@
       font-style: italic;
       margin-bottom: 26px;
     }
+
+    /* ---- LEVEL SELECTOR ---- */
+    #menu .level-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 22px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    #menu .level-card {
+      flex: 1 1 200px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: background 0.15s ease-out, border-color 0.15s ease-out, transform 0.08s ease-out;
+      text-align: left;
+    }
+    #menu .level-card:hover { background: rgba(255, 220, 130, 0.08); transform: translateY(-1px); }
+    #menu .level-card.active {
+      background: rgba(255, 220, 130, 0.18);
+      border-color: rgba(255, 220, 130, 0.85);
+    }
+    #menu .level-card.locked { opacity: 0.65; }
+    #menu .level-card .lvl-name {
+      color: rgba(255, 230, 150, 0.95);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    #menu .level-card .lvl-blurb {
+      color: rgba(200, 215, 220, 0.78);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    #menu .level-card .lvl-status {
+      margin-top: 6px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    #menu .level-card.active .lvl-status { color: rgba(190, 230, 130, 0.95); }
+    #menu .level-card.locked .lvl-status { color: rgba(255, 180, 130, 0.95); }
 
     #menu .fly-grid {
       display: grid;

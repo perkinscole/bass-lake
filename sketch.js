@@ -58,13 +58,81 @@ let catchCount = { bluegill: 0, pumpkinseed: 0, crappie: 0, bass: 0 };
 let lastCatchToast = null;        // { species, time } for brief on-screen popup
 let lastMissToast = null;         // { reason, time } when a fish escapes
 
+// ---- LEVELS ----
+// Each level changes the lake's palette, the tree style, the species you can
+// catch, and the fly→species table. Everything else (kayak, casting, sonar,
+// fight loop, eagle, ducks) is shared.
+const LEVELS = {
+  bassLake: {
+    name: 'Bass Lake',
+    blurb: 'murky warm-water lake · sunfish, crappie, largemouth',
+    palette: {
+      forest:    [80, 95, 45],     // warm yellow-green meadow
+      forestSpeck: [60, 80, 40],
+      sand:      [195, 170, 115],
+      shoreline: [40, 28, 18],
+      waterBase: [28, 64, 52],     // murky teal-green
+      patchTeal: [50, 95, 78],
+      patchAlgae:[18, 48, 38],
+      patchTannin:[60, 55, 30],
+      ambient:   [120, 150, 90],   // motes color
+      bgClear:   [20, 30, 18],     // off-canvas backdrop
+    },
+    treeStyle: 'deciduous',
+    species:   ['bluegill', 'pumpkinseed', 'crappie', 'bass'],
+    catches: {
+      fly:         ['bluegill', 'pumpkinseed'],
+      nymph:       ['crappie'],
+      woolyBugger: ['bass'],
+    },
+    rewards: { bluegill: 5, pumpkinseed: 8, crappie: 15, bass: 40 },
+    spawn:   { bluegill: 100, pumpkinseed: 56, crappie: 67, bass: 9 },
+    propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110 },
+    unlocked: true,
+    unlockCost: 0,
+  },
+  alpineLake: {
+    name: 'Alpine Lake',
+    blurb: 'cold clear high-country water · trout',
+    palette: {
+      forest:    [165, 180, 155],  // pale rocky meadow
+      forestSpeck: [120, 140, 110],
+      sand:      [200, 200, 195],
+      shoreline: [80, 75, 70],     // grey rock
+      waterBase: [50, 110, 145],   // alpine blue
+      patchTeal: [80, 165, 200],
+      patchAlgae:[35, 80, 110],
+      patchTannin:[120, 135, 145],
+      ambient:   [220, 230, 240],
+      bgClear:   [25, 35, 45],
+    },
+    treeStyle: 'pine',
+    species:   ['rainbowTrout', 'brookTrout', 'cutthroatTrout'],
+    catches: {
+      fly:         ['rainbowTrout'],
+      nymph:       ['brookTrout'],
+      woolyBugger: ['cutthroatTrout'],
+    },
+    rewards: { rainbowTrout: 12, brookTrout: 18, cutthroatTrout: 30 },
+    spawn:   { rainbowTrout: 90, brookTrout: 60, cutthroatTrout: 6 },
+    // alpine lakes are clearer and rockier — no lilies/cattails, more rocks
+    propCounts: { lilypads: 0, weeds: 90, cattails: 0, trees: 300, logs: 18, rocks: 260 },
+    unlocked: false,
+    unlockCost: 150,
+  },
+};
+let currentLevel = 'bassLake';
+function lvl() { return LEVELS[currentLevel]; }
+
 // ---- PROGRESSION ----
 // Player state — earned/spent through gameplay, saved to localStorage so it
 // persists across sessions. Start with the smallest setup; everything else
 // is bought from the tackle shop on the menu screen.
-const PROGRESS_KEY = 'bassLakeState_v1';
+const PROGRESS_KEY = 'bassLakeState_v2';
 let playerState = {
   money: 0,
+  level: 'bassLake',
+  levelsUnlocked: { bassLake: true, alpineLake: false },
   unlocks: {
     flies: { fly: true, nymph: false, woolyBugger: false },
     rod: 1,         // 1, 2, 3 — gates max cast range
@@ -124,8 +192,9 @@ function loadProgress() {
     let data = localStorage.getItem(PROGRESS_KEY);
     if (data) {
       let parsed = JSON.parse(data);
-      // shallow-merge so new fields added later get default values
       if (parsed.money != null) playerState.money = parsed.money;
+      if (parsed.level && LEVELS[parsed.level]) playerState.level = parsed.level;
+      if (parsed.levelsUnlocked) Object.assign(playerState.levelsUnlocked, parsed.levelsUnlocked);
       if (parsed.unlocks) {
         if (parsed.unlocks.flies) Object.assign(playerState.unlocks.flies, parsed.unlocks.flies);
         if (parsed.unlocks.rod   != null) playerState.unlocks.rod = parsed.unlocks.rod;
@@ -133,6 +202,7 @@ function loadProgress() {
         if (parsed.unlocks.sonar != null) playerState.unlocks.sonar = parsed.unlocks.sonar;
       }
     }
+    currentLevel = playerState.level || 'bassLake';
   } catch {}
 }
 
@@ -285,55 +355,50 @@ function setup() {
   cam.x = constrain(player.pos.x - width / (2 * zoom), 0, WORLD_W - width / zoom);
   cam.y = constrain(player.pos.y - height / (2 * zoom), 0, WORLD_H - height / zoom);
 
-  // Mix of bluegill (most common), pumpkinseed (lily-pad lovers), crappie (deep-water schoolers)
-  // Spawned in habitat-appropriate spots so they start near their preferred structure.
-  for (let i = 0; i < NUM_BASS; i++) {
-    let p = lake.randomEdgePoint();
-    bass.push(new Bass(p.x, p.y));
-  }
-  for (let i = 0; i < 200; i++) {
+  // Props — counts and tree style come from the current level config
+  let counts = lvl().propCounts;
+  let isPine = lvl().treeStyle === 'pine';
+  for (let i = 0; i < counts.lilypads; i++) {
     let p = lake.randomEdgePoint(random(0.78, 0.92));
     lilypads.push({ x: p.x, y: p.y, r: random(14, 30), a: random(TWO_PI) });
   }
-  for (let i = 0; i < 700; i++) {
+  for (let i = 0; i < counts.weeds; i++) {
     let p = lake.randomEdgePoint(random(0.7, 0.85));
     weeds.push({ x: p.x, y: p.y, h: random(20, 60), sway: random(TWO_PI) });
   }
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < counts.cattails; i++) {
     let p = lake.randomEdgePoint(random(0.86, 0.98));
     cattails.push({ x: p.x, y: p.y, h: random(28, 55), sway: random(TWO_PI) });
   }
 
-  // Trees in the dirt around the lake — overhanging cast shadows over water
-  for (let i = 0; i < 250; i++) {
+  // Trees — bass lake uses warm deciduous canopies; alpine lake uses dark pines.
+  for (let i = 0; i < counts.trees; i++) {
     let p = randomShorePoint(random(40, 320));
     trees.push({
       x: p.x,
       y: p.y,
-      r: random(40, 95),
+      r: isPine ? random(30, 60) : random(40, 95),
       shade: random(0.15, 0.35),
-      hue: 50 + random(-12, 12),
-      val: 80 + random(-20, 20),
-      tone: 50 + random(-15, 15),
+      hue: isPine ? 40 + random(-8, 8)  : 50 + random(-12, 12),
+      val: isPine ? 60 + random(-10, 10) : 80 + random(-20, 20),
+      tone: isPine ? 35 + random(-10, 10) : 50 + random(-15, 15),
+      pine: isPine,
     });
   }
 
-  // Fallen logs partially in water
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < counts.logs; i++) {
     let p = lake.randomEdgePoint(random(0.85, 1.02));
     let inward = lake.inwardNormal(p.x, p.y);
     let angle = inward.heading() + random(-0.6, 0.6);
     logs.push({
-      x: p.x,
-      y: p.y,
+      x: p.x, y: p.y,
       len: random(80, 160),
       thick: random(10, 18),
       a: angle,
     });
   }
 
-  // Rocks scattered along shore and shallows
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; i < counts.rocks; i++) {
     let p = lake.randomEdgePoint(random(0.88, 1.03));
     rocks.push({
       x: p.x, y: p.y,
@@ -359,39 +424,26 @@ function setup() {
     ducks.push(a, b);
   }
 
-  // Spawn panfish AFTER habitat structures so each species can pick its preferred target.
-  // Bluegill: most numerous, near weed beds.
-  let nBluegill = floor(NUM_PANFISH * 0.45);
-  let nPumpkin  = floor(NUM_PANFISH * 0.25);
-  let nCrappie  = NUM_PANFISH - nBluegill - nPumpkin;
-  for (let i = 0; i < nBluegill; i++) {
-    let p = (weeds.length > 0 && random() < 0.7)
-      ? jitterAround(random(weeds), 60)
-      : lake.randomEdgePoint(random(0.6, 0.85));
-    if (lake.contains(p.x, p.y, 20)) panfish.push(new Panfish(p.x, p.y, 'bluegill'));
-    else { let q = lake.randomInteriorPoint(); panfish.push(new Panfish(q.x, q.y, 'bluegill')); }
-  }
-  for (let i = 0; i < nPumpkin; i++) {
-    let p = (lilypads.length > 0 && random() < 0.7)
-      ? jitterAround(random(lilypads), 50)
-      : lake.randomEdgePoint(random(0.6, 0.82));
-    if (lake.contains(p.x, p.y, 20)) panfish.push(new Panfish(p.x, p.y, 'pumpkinseed'));
-    else { let q = lake.randomInteriorPoint(); panfish.push(new Panfish(q.x, q.y, 'pumpkinseed')); }
-  }
-  for (let i = 0; i < nCrappie; i++) {
-    // crappie prefer deeper water — spawn near interior, near logs if available
-    let p;
-    if (logs.length > 0 && random() < 0.5) {
-      p = jitterAround(random(logs), 70);
-    } else {
-      p = lake.randomEdgePoint(random(0.2, 0.55));
+  // Fish — counts and species come from the current level config. Each
+  // species' SPECIES.class field decides whether it spawns as a Panfish (boid
+  // flocking) or a Bass (lurker/strike predator).
+  for (let species in lvl().spawn) {
+    let count = lvl().spawn[species];
+    let cfg = SPECIES[species];
+    if (!cfg) continue;
+    for (let i = 0; i < count; i++) {
+      let p = pickSpawnPoint(cfg);
+      if (cfg.class === 'bass') {
+        bass.push(new Bass(p.x, p.y, species));
+      } else {
+        panfish.push(new Panfish(p.x, p.y, species));
+      }
     }
-    if (lake.contains(p.x, p.y, 30)) panfish.push(new Panfish(p.x, p.y, 'crappie'));
-    else { let q = lake.randomInteriorPoint(); panfish.push(new Panfish(q.x, q.y, 'crappie')); }
   }
 
   buildStaticImage();
   buildSpeciesPortraits();
+  populateLevelGroup();
   populateMenuFlyGrid();
   initSonar();
   refreshUnlocks();
@@ -616,6 +668,52 @@ function updateSonar() {
   sonarCtx.fillRect(xCol, 0, 1, sonarH);
 }
 
+function populateLevelGroup() {
+  let group = document.getElementById('level-group');
+  if (!group) return;
+  group.innerHTML = Object.entries(LEVELS).map(([id, L]) => {
+    let active = id === currentLevel;
+    let unlocked = playerState.levelsUnlocked[id];
+    let cls = 'level-card' + (active ? ' active' : '') + (!unlocked ? ' locked' : '');
+    let status = active
+      ? 'Active'
+      : (unlocked ? 'Tap to switch' : `Locked · $${L.unlockCost}`);
+    return `<div class="${cls}" data-level="${id}">
+      <div class="lvl-name">${L.name}</div>
+      <div class="lvl-blurb">${L.blurb}</div>
+      <div class="lvl-status">${status}</div>
+    </div>`;
+  }).join('');
+  group.querySelectorAll('.level-card').forEach(el => {
+    el.addEventListener('click', () => onLevelCardClick(el.dataset.level));
+  });
+  // Also reflect current level in the menu title/tagline
+  let titleEl = document.getElementById('menu-title');
+  let taglineEl = document.getElementById('menu-tagline');
+  if (titleEl) titleEl.textContent = lvl().name;
+  if (taglineEl) taglineEl.textContent = lvl().blurb;
+}
+
+function onLevelCardClick(id) {
+  if (!LEVELS[id]) return;
+  if (id === currentLevel) return;
+  if (!playerState.levelsUnlocked[id]) {
+    // try to buy the unlock with current money
+    let cost = LEVELS[id].unlockCost || 0;
+    if (playerState.money < cost) {
+      // brief shake / feedback would be nice but for now just bail
+      return;
+    }
+    playerState.money -= cost;
+    playerState.levelsUnlocked[id] = true;
+    playSound('buy');
+  }
+  playerState.level = id;
+  saveProgress();
+  // hard reload for a clean world rebuild with new palette/species/props
+  location.reload();
+}
+
 function populateMenuFlyGrid() {
   let grid = document.getElementById('fly-grid');
   if (!grid) return;
@@ -699,7 +797,7 @@ function buildStaticImage() {
     g.ellipse(s.x, s.y, s.r);
   }
 
-  // trees: trunks then canopies (matches drawTrees)
+  // trees: trunks then canopies. Pines get a spiky, conical top-down look.
   for (let t of trees) {
     g.fill(40, 30, 22, 220);
     g.ellipse(t.x, t.y, t.r * 0.35, t.r * 0.35);
@@ -707,21 +805,45 @@ function buildStaticImage() {
   for (let t of trees) {
     g.fill(0, 0, 0, 60);
     g.ellipse(t.x + 6, t.y + 8, t.r * 1.6, t.r * 1.4);
-    g.fill(t.hue - 10, t.val - 10, t.tone - 10);
-    g.ellipse(t.x, t.y, t.r * 1.7, t.r * 1.5);
-    for (let i = 0; i < 5; i++) {
-      let a = (i / 5) * TWO_PI + t.x * 0.01;
-      let dx = Math.cos(a) * t.r * 0.45;
-      let dy = Math.sin(a) * t.r * 0.4;
-      g.fill(t.hue, t.val, t.tone, 220);
-      g.ellipse(t.x + dx, t.y + dy, t.r * 0.85, t.r * 0.75);
+    if (t.pine) {
+      // base dark-green disk, then a starburst of triangle "branches"
+      // radiating outward to suggest pine needles seen from directly above.
+      let baseR = t.r * 1.0;
+      g.fill(t.hue - 6, t.val - 12, t.tone - 6);
+      g.ellipse(t.x, t.y, baseR * 1.2, baseR * 1.2);
+      g.fill(t.hue, t.val, t.tone);
+      let prongs = 8;
+      g.beginShape();
+      for (let i = 0; i < prongs * 2; i++) {
+        let a = (i / (prongs * 2)) * TWO_PI + t.x * 0.005;
+        let rr = (i % 2 === 0) ? baseR * 1.05 : baseR * 0.62;
+        g.vertex(t.x + Math.cos(a) * rr, t.y + Math.sin(a) * rr);
+      }
+      g.endShape(g.CLOSE);
+      // sunlit tip near the apex of the conical tree
+      g.fill(t.hue + 22, t.val + 30, t.tone + 12, 240);
+      g.ellipse(t.x - t.r * 0.05, t.y - t.r * 0.08, t.r * 0.32, t.r * 0.32);
+      // dark central shadow at the very top (suggesting the tip of the cone)
+      g.fill(t.hue - 18, t.val - 25, t.tone - 12, 180);
+      g.ellipse(t.x, t.y, t.r * 0.18, t.r * 0.18);
+    } else {
+      g.fill(t.hue - 10, t.val - 10, t.tone - 10);
+      g.ellipse(t.x, t.y, t.r * 1.7, t.r * 1.5);
+      for (let i = 0; i < 5; i++) {
+        let a = (i / 5) * TWO_PI + t.x * 0.01;
+        let dx = Math.cos(a) * t.r * 0.45;
+        let dy = Math.sin(a) * t.r * 0.4;
+        g.fill(t.hue, t.val, t.tone, 220);
+        g.ellipse(t.x + dx, t.y + dy, t.r * 0.85, t.r * 0.75);
+      }
+      g.fill(t.hue + 15, t.val + 25, t.tone + 5, 200);
+      g.ellipse(t.x - t.r * 0.2, t.y - t.r * 0.25, t.r * 0.6, t.r * 0.5);
     }
-    g.fill(t.hue + 15, t.val + 25, t.tone + 5, 200);
-    g.ellipse(t.x - t.r * 0.2, t.y - t.r * 0.25, t.r * 0.6, t.r * 0.5);
   }
 
-  // lake water polygon
-  g.fill(28, 64, 52);
+  // lake water polygon — base color from level palette
+  let waterPal = lvl().palette.waterBase;
+  g.fill(waterPal[0], waterPal[1], waterPal[2]);
   g.beginShape();
   for (let p of lake.points) g.vertex(p.x, p.y);
   g.endShape(g.CLOSE);
@@ -757,7 +879,8 @@ function buildStaticImage() {
   g.drawingContext.restore();
 
   // shoreline edge
-  g.stroke(40, 28, 18, 220);
+  let shorePal = lvl().palette.shoreline;
+  g.stroke(shorePal[0], shorePal[1], shorePal[2], 220);
   g.strokeWeight(4);
   g.noFill();
   g.beginShape();
@@ -804,6 +927,27 @@ function buildStaticImage() {
 
 function jitterAround(obj, r) {
   return { x: obj.x + random(-r, r), y: obj.y + random(-r, r) };
+}
+
+function pickSpawnPoint(cfg) {
+  // Habitat-aware spawn for both panfish-class and bass-class species.
+  let p;
+  if (cfg.class === 'bass') {
+    p = lake.randomEdgePoint(random(0.78, 0.93));
+  } else if (cfg.habitat === 'weeds' && weeds.length > 0 && random() < 0.7) {
+    p = jitterAround(random(weeds), 60);
+  } else if (cfg.habitat === 'lilypads' && lilypads.length > 0 && random() < 0.7) {
+    p = jitterAround(random(lilypads), 50);
+  } else if (cfg.habitat === 'logs' && logs.length > 0 && random() < 0.5) {
+    p = jitterAround(random(logs), 70);
+  } else if (cfg.habitat === 'rocks' && rocks.length > 0 && random() < 0.6) {
+    p = jitterAround(random(rocks), 60);
+  } else {
+    p = lake.randomEdgePoint(random(0.35, 0.85));
+  }
+  // safety: make sure spawn ends up in water
+  if (!lake.contains(p.x, p.y, 20)) p = lake.randomInteriorPoint();
+  return p;
 }
 
 function randomShorePoint(distOutside) {
@@ -971,9 +1115,12 @@ function draw() {
     }
     if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
     if (catchEl) {
-      catchEl.textContent =
-        `Caught — bluegill ${catchCount.bluegill}  ·  pumpkinseed ${catchCount.pumpkinseed}  ·  ` +
-        `crappie ${catchCount.crappie}  ·  bass ${catchCount.bass}`;
+      // Show only species relevant to the current level
+      let parts = lvl().species.map(sp => {
+        let nice = sp.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+        return `${nice} ${catchCount[sp] || 0}`;
+      });
+      catchEl.textContent = `Caught — ${parts.join('  ·  ')}`;
     }
   }
   // Sonar — scroll one column per frame
@@ -1041,25 +1188,49 @@ function draw() {
     }
   }
 
-  // respawn bass slowly when caught
-  if (bass.length < NUM_BASS && frameCount % 600 === 0) {
-    let p = lake.randomEdgePoint(random(0.78, 0.93));
-    bass.push(new Bass(p.x, p.y));
+  // Respawn — driven by the current level's spawn table.
+  // Each kind of fish (panfish-class and bass-class) has its own slow
+  // respawn cadence. We pick the most under-represented species each tick.
+  let levelSpawn = lvl().spawn;
+  let panfishTarget = 0, bassTarget = 0;
+  for (let sp in levelSpawn) {
+    let cls = SPECIES[sp]?.class;
+    if (cls === 'bass') bassTarget += levelSpawn[sp];
+    else                panfishTarget += levelSpawn[sp];
   }
 
-  // respawn panfish slowly so the lake stays alive — keep species roughly balanced
-  if (panfish.length < NUM_PANFISH && frameCount % 90 === 0) {
-    let counts = { bluegill: 0, pumpkinseed: 0, crappie: 0 };
-    for (let f of panfish) counts[f.species]++;
-    let weights = { bluegill: 0.45, pumpkinseed: 0.25, crappie: 0.30 };
-    let lowest = 'bluegill', lowestRatio = Infinity;
-    for (let sp of Object.keys(weights)) {
-      let r = counts[sp] / (NUM_PANFISH * weights[sp]);
-      if (r < lowestRatio) { lowestRatio = r; lowest = sp; }
-    }
-    let p = lake.randomInteriorPoint();
-    panfish.push(new Panfish(p.x, p.y, lowest));
+  if (bass.length < bassTarget && frameCount % 600 === 0) {
+    let lowest = _underrepresentedSpecies(bass, levelSpawn, 'bass');
+    let p = lake.randomEdgePoint(random(0.78, 0.93));
+    bass.push(new Bass(p.x, p.y, lowest));
   }
+
+  if (panfish.length < panfishTarget && frameCount % 90 === 0) {
+    let lowest = _underrepresentedSpecies(panfish, levelSpawn, 'panfish');
+    if (lowest) {
+      let cfg = SPECIES[lowest];
+      let p = pickSpawnPoint(cfg);
+      panfish.push(new Panfish(p.x, p.y, lowest));
+    }
+  }
+}
+
+function _underrepresentedSpecies(arr, levelSpawn, classFilter) {
+  let counts = {};
+  for (let s in levelSpawn) {
+    if ((SPECIES[s]?.class || 'panfish') !== classFilter) continue;
+    counts[s] = 0;
+  }
+  for (let f of arr) {
+    if (counts[f.species] != null) counts[f.species]++;
+  }
+  let best = null, bestRatio = Infinity;
+  for (let s in counts) {
+    let target = levelSpawn[s] || 1;
+    let r = counts[s] / target;
+    if (r < bestRatio) { bestRatio = r; best = s; }
+  }
+  return best;
 }
 
 function windowResized() {
@@ -1087,7 +1258,7 @@ function toggleMenu() {
   if (!menuEl) return;
   menuOpen = !menuOpen;
   menuEl.classList.toggle('hidden', !menuOpen);
-  // Refresh the locked-state visuals in the fly grid in case shopping happened
+  populateLevelGroup();
   populateMenuFlyGrid();
   // Release any held movement keys so the kayak doesn't drift while in menu
   if (menuOpen) {
@@ -1242,17 +1413,18 @@ class Lake {
       let n = noise(p.x * 0.0008 + patchSeed, p.y * 0.0008 + patchSeed);
       let m = noise(p.x * 0.003 + patchSeed * 2, p.y * 0.003 + patchSeed * 2);
       // mix between dark olive scum, brighter teal patch, and brownish tannin
-      let kind = n;  // 0..1
+      let pal = lvl().palette;
+      let kind = n;
       let r, g, b, a;
       if (kind < 0.4) {
-        // darker green — algae shadow / submerged weeds visible from above
-        r = 18; g = 48; b = 38; a = 120 * m + 30;
+        r = pal.patchAlgae[0]; g = pal.patchAlgae[1]; b = pal.patchAlgae[2];
+        a = 120 * m + 30;
       } else if (kind < 0.7) {
-        // slightly brighter teal — clearer water spots
-        r = 50; g = 95; b = 78; a = 90 * m + 30;
+        r = pal.patchTeal[0]; g = pal.patchTeal[1]; b = pal.patchTeal[2];
+        a = 90 * m + 30;
       } else {
-        // brownish tannin tint near woody banks
-        r = 60; g = 55; b = 30; a = 100 * m + 25;
+        r = pal.patchTannin[0]; g = pal.patchTannin[1]; b = pal.patchTannin[2];
+        a = 100 * m + 25;
       }
       this.surfacePatches.push({
         x: p.x, y: p.y,
@@ -1604,9 +1776,8 @@ class Lake {
   }
 
   drawBackground() {
-    // Warm yellow-green forest floor — clearly distinct from cool teal water
-    background(80, 95, 45);
-    // Specks are tiny; skip drawing at low zoom where they aren't perceptible.
+    let pal = lvl().palette;
+    background(pal.forest[0], pal.forest[1], pal.forest[2]);
     if (zoom < 0.5) return;
     noStroke();
     for (let s of this.dirtSpecks) {
@@ -1616,7 +1787,7 @@ class Lake {
     }
     for (let s of this.sandSpecks) {
       if (!inView(s.x, s.y, 10)) continue;
-      fill(195, 170, 115, 140);
+      fill(pal.sand[0], pal.sand[1], pal.sand[2], 140);
       ellipse(s.x, s.y, s.r);
     }
   }
@@ -1661,19 +1832,24 @@ class Lake {
     }
     noStroke();
 
-    // Algae motes / surface scum
+    // Surface motes — algae specks on bass lake, glittering droplets on alpine
+    let mp = lvl().palette.ambient;
     for (let p of this.shimmerPoints) {
       if (!inView(p.x, p.y, 12)) continue;
       let a = noise(p.x * 0.01, p.y * 0.01, frameCount * 0.008);
-      fill(140, 165, 100, a * 35);
+      fill(mp[0], mp[1], mp[2], a * 35);
       ellipse(p.x, p.y, 4 + a * 6, 2 + a * 3);
     }
   }
 }
 
-// ---------- PANFISH species config ----------
+// ---------- FISH species config ----------
+// Each species also has a `class` field: 'panfish' (uses boid flocking) or
+// 'bass' (uses lurker/strike AI). That picks which constructor and which
+// global array it lives in.
 const SPECIES = {
   bluegill: {
+    class: 'panfish',
     sizeRange: [9, 12],
     bodyAspect: 0.62,
     maxSpeed: 1.05,
@@ -1685,9 +1861,10 @@ const SPECIES = {
     depthBias: -0.0006,
     schoolWith: 'bluegill',
     depthAlpha: 215,
-    zRange: [0.15, 0.50],     // shallow-mid: edges of weed beds
+    zRange: [0.15, 0.50],
   },
   pumpkinseed: {
+    class: 'panfish',
     sizeRange: [9, 12],
     bodyAspect: 0.65,
     maxSpeed: 0.85,
@@ -1702,6 +1879,7 @@ const SPECIES = {
     zRange: [0.05, 0.30],     // surface-loving — closest to the top
   },
   crappie: {
+    class: 'panfish',
     sizeRange: [11, 14],
     bodyAspect: 0.5,
     maxSpeed: 1.15,
@@ -1713,7 +1891,44 @@ const SPECIES = {
     depthBias: 0.0008,
     schoolWith: 'crappie',
     depthAlpha: 230,
-    zRange: [0.40, 0.70],     // suspends mid-column near structure
+    zRange: [0.40, 0.70],
+  },
+  bass: {
+    class: 'bass',
+  },
+  // ---- ALPINE LAKE TROUT ----
+  rainbowTrout: {
+    class: 'panfish',
+    sizeRange: [11, 14],
+    bodyAspect: 0.42,           // slender torpedo shape
+    maxSpeed: 1.35,
+    maxForce: 0.034,
+    sepR: 16, neighR: 50, fleeR: 110,
+    sepW: 1.4, aliW: 0.9, cohW: 0.8, fleeW: 2.6,   // less schoolish than panfish
+    habitat: 'weeds',
+    habitatW: 0.02,
+    depthBias: 0,                                   // any depth
+    schoolWith: 'rainbowTrout',
+    depthAlpha: 210,
+    zRange: [0.10, 0.45],
+  },
+  brookTrout: {
+    class: 'panfish',
+    sizeRange: [9, 12],
+    bodyAspect: 0.4,
+    maxSpeed: 1.1,
+    maxForce: 0.030,
+    sepR: 18, neighR: 38, fleeR: 90,
+    sepW: 1.6, aliW: 0.6, cohW: 0.5, fleeW: 2.4,   // mostly solitary
+    habitat: 'rocks',
+    habitatW: 0.03,
+    depthBias: -0.0005,                             // shallows / rocks
+    schoolWith: 'brookTrout',
+    depthAlpha: 215,
+    zRange: [0.05, 0.35],
+  },
+  cutthroatTrout: {
+    class: 'bass',
   },
 };
 
@@ -1992,20 +2207,20 @@ class Panfish {
 
 // ---------- BASS (lurker / darter) ----------
 class Bass {
-  constructor(x, y) {
+  constructor(x, y, species = 'bass') {
     this.pos = createVector(x, y);
     this.vel = createVector();
     this.acc = createVector();
     this.size = random(20, 28);
     this.dashSpeed = 7.0;
-    this.state = 'lurk'; // 'lurk' | 'dash' | 'recover'
+    this.state = 'lurk';
     this.target = null;
     this.cooldown = 0;
     this.lurkPoint = this._pickLurkPoint();
     this.lurkHeading = random(TWO_PI);
     this.wiggle = random(TWO_PI);
     this.strikeRange = random(70, 95);
-    this.species = 'bass';
+    this.species = species;
     this.hooked = false;
     // bass sit deep near the bottom, surge up when striking
     this.z = 0.85;
@@ -3032,17 +3247,19 @@ class FlyCast {
     let cfg = this.cfg;
     let bestD = cfg.biteRange;
     let best = null;
-    // panfish first
+    // What does THIS fly type catch in the current level? Build a quick lookup.
+    let levelCatches = lvl().catches[this.flyType] || [];
+    let canCatch = Object.create(null);
+    for (let sp of levelCatches) canCatch[sp] = true;
     for (let f of panfish) {
       if (f.dead || f.hooked) continue;
-      if (!cfg.catches[f.species]) continue;
+      if (!canCatch[f.species]) continue;
       let d = Math.hypot(f.pos.x - this.flyX, f.pos.y - this.flyY);
       if (d < bestD) { bestD = d; best = f; }
     }
-    // bass
     for (let b of bass) {
       if (b.hooked) continue;
-      if (!cfg.catches.bass) continue;
+      if (!canCatch[b.species]) continue;
       let d = Math.hypot(b.pos.x - this.flyX, b.pos.y - this.flyY);
       if (d < bestD) { bestD = d; best = b; }
     }
@@ -3065,7 +3282,7 @@ class FlyCast {
     if (this.hookedFish) {
       let species = this.hookedFish.species;
       catchCount[species] = (catchCount[species] || 0) + 1;
-      let reward = REWARDS[species] || 0;
+      let reward = (lvl().rewards && lvl().rewards[species]) || REWARDS[species] || 0;
       playerState.money += reward;
       saveProgress();
       lastCatchToast = { species, time: frameCount, money: reward };
