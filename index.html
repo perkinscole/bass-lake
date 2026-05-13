@@ -107,6 +107,15 @@
     </div>
   </div>
 
+  <!-- Fly box — opens from clicking the HUD fly badge or pressing F -->
+  <div id="flybox" class="hidden">
+    <div class="flybox-card">
+      <div class="flybox-title">Fly Box</div>
+      <div class="flybox-grid" id="flybox-grid"></div>
+      <button id="flybox-close">Close</button>
+    </div>
+  </div>
+
   <!-- Tackle shop modal — opens from the menu -->
   <div id="shop" class="hidden">
     <div class="shop-card">
@@ -342,6 +351,105 @@
     #menu .fly-card.locked::after {
       content: '🔒'; position: absolute; top: 6px; right: 8px;
       font-size: 14px;
+    }
+
+    /* ---- FLY BOX ---- */
+    #flybox {
+      position: fixed; inset: 0;
+      background: rgba(10, 22, 18, 0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 105;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #flybox.hidden { display: none; }
+    #flybox .flybox-card {
+      background: linear-gradient(135deg, rgba(38, 28, 18, 0.97), rgba(22, 16, 10, 0.97));
+      border: 2px solid rgba(220, 175, 90, 0.6);
+      border-radius: 14px;
+      padding: 24px 32px 22px 32px;
+      max-width: 92vw;
+      color: rgba(230, 215, 190, 0.95);
+      font: 14px/1.4 -apple-system, system-ui, sans-serif;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    #flybox .flybox-title {
+      font: 700 22px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.95);
+      letter-spacing: 1px;
+      margin-bottom: 18px;
+    }
+    #flybox .flybox-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    #flybox .flybox-slot {
+      background: rgba(70, 50, 30, 0.45);
+      border: 1px solid rgba(220, 175, 90, 0.35);
+      border-radius: 10px;
+      padding: 12px 10px 10px 10px;
+      min-width: 140px;
+      cursor: pointer;
+      transition: background 0.15s ease-out, border-color 0.15s ease-out, transform 0.08s ease-out;
+    }
+    #flybox .flybox-slot:hover { background: rgba(220, 175, 90, 0.15); transform: translateY(-1px); }
+    #flybox .flybox-slot.active {
+      background: rgba(220, 175, 90, 0.25);
+      border-color: rgba(255, 220, 130, 0.95);
+    }
+    #flybox .flybox-slot.locked { opacity: 0.45; cursor: not-allowed; }
+    #flybox .flybox-slot img {
+      display: block;
+      margin: 0 auto 8px auto;
+      width: 110px;
+      height: auto;
+      image-rendering: pixelated;
+    }
+    #flybox .flybox-slot .name {
+      color: rgba(255, 230, 150, 0.95);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    #flybox .flybox-slot .targets {
+      color: rgba(200, 215, 220, 0.78);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    #flybox .flybox-slot .hotkey {
+      margin-top: 6px;
+      font: 600 10px 'SF Mono', Menlo, monospace;
+      color: rgba(255, 220, 130, 0.6);
+    }
+    #flybox #flybox-close {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(220, 175, 90, 0.35);
+      color: rgba(220, 175, 90, 0.9);
+      border-radius: 8px;
+      padding: 9px;
+      font: 600 12px -apple-system, system-ui, sans-serif;
+      letter-spacing: 1px;
+      cursor: pointer;
+    }
+
+    /* Current fly badge in HUD — clickable */
+    #hud-fly {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+    }
+    #hud-fly img {
+      width: 38px;
+      height: auto;
+      image-rendering: pixelated;
+      vertical-align: middle;
     }
 
     /* ---- TACKLE SHOP ---- */

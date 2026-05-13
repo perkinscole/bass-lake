@@ -215,6 +215,7 @@ const STATIC_SCALE = 0.5;
 // Pre-rendered species sprites as data URLs — used by the catch-toast HUD
 // element to show a picture of the fish you just caught.
 let speciesPortraits = {};
+let flyIcons = {};       // dataURL per fly type, generated procedurally
 let menuOpen = true;     // game ignores input while menu is up
 
 // ---- WIND ----
@@ -459,6 +460,7 @@ function setup() {
 
   buildStaticImage();
   buildSpeciesPortraits();
+  buildFlyIcons();
   populateLevelGroup();
   populateMenuFlyGrid();
   initSonar();
@@ -489,6 +491,14 @@ function setup() {
       setMuted(!muted);
     });
   }
+  let flyBadge = document.getElementById('hud-fly');
+  if (flyBadge) flyBadge.addEventListener('click', () => { if (!menuOpen) openFlyBox(); });
+  let flyboxClose = document.getElementById('flybox-close');
+  if (flyboxClose) flyboxClose.addEventListener('click', closeFlyBox);
+  let flyboxBg = document.getElementById('flybox');
+  if (flyboxBg) flyboxBg.addEventListener('click', e => {
+    if (e.target === flyboxBg) closeFlyBox();
+  });
   initTouchControls();
 }
 
@@ -684,6 +694,41 @@ function updateSonar() {
   sonarCtx.fillRect(xCol, 0, 1, sonarH);
 }
 
+function populateFlyBox() {
+  let grid = document.getElementById('flybox-grid');
+  if (!grid) return;
+  let order = ['fly', 'nymph', 'woolyBugger'];
+  let hotkeys = { fly: '1', nymph: '2', woolyBugger: '3' };
+  // Show what each fly catches in the *current* level
+  let catches = lvl().catches || {};
+  grid.innerHTML = order.map(t => {
+    let cfg = FLY_CONFIG[t];
+    let unlocked = playerState.unlocks.flies[t];
+    let active = selectedFly === t;
+    let cls = 'flybox-slot' + (active ? ' active' : '') + (!unlocked ? ' locked' : '');
+    let targets = (catches[t] || []).map(s => s.replace(/([A-Z])/g, ' $1').toLowerCase().trim()).join(' · ');
+    let img = flyIcons[t] ? `<img src="${flyIcons[t]}" alt="${cfg.label}">` : '';
+    return `<div class="${cls}" data-fly="${t}">
+      ${img}
+      <div class="name">${cfg.label}${unlocked ? '' : ' 🔒'}</div>
+      <div class="targets">${unlocked ? (targets || '—') : 'Locked'}</div>
+      <div class="hotkey">[${hotkeys[t]}]</div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.flybox-slot').forEach(el => {
+    el.addEventListener('click', () => {
+      let t = el.dataset.fly;
+      if (!playerState.unlocks.flies[t]) return;
+      trySelectFly(t);
+      populateFlyBox();           // refresh active highlight
+      closeFlyBox();
+    });
+  });
+}
+
+function openFlyBox()  { populateFlyBox(); document.getElementById('flybox')?.classList.remove('hidden'); }
+function closeFlyBox() { document.getElementById('flybox')?.classList.add('hidden'); }
+
 function populateLevelGroup() {
   let group = document.getElementById('level-group');
   if (!group) return;
@@ -779,6 +824,131 @@ function populateShop() {
       playSound('buy');
     });
   });
+}
+
+function buildFlyIcons() {
+  flyIcons = {};
+  for (let flyType of ['fly', 'nymph', 'woolyBugger']) {
+    let g = createGraphics(120, 80);
+    g.pixelDensity(2);
+    g.clear();
+    drawFlyArt(g, flyType, 60, 40);
+    flyIcons[flyType] = g.canvas.toDataURL('image/png');
+  }
+}
+
+function drawFlyArt(g, type, x, y) {
+  g.push();
+  g.translate(x, y);
+
+  if (type === 'fly') {
+    // ---- DRY FLY: cream body, upright wing post, radial hackle, hook curve ----
+    // hook curve underneath
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    // hackle (radial bristles around body) — dense
+    g.stroke(140, 105, 60, 220); g.strokeWeight(0.9);
+    for (let a = 0; a < TWO_PI; a += PI / 14) {
+      g.line(-2, -2, -2 + Math.cos(a) * 16, -2 + Math.sin(a) * 16);
+    }
+    // body — tan/cream segmented
+    g.noStroke();
+    g.fill(215, 180, 120);
+    g.ellipse(-2, -2, 30, 11);
+    g.fill(170, 135, 80);
+    for (let i = -14; i < 8; i += 5) {
+      g.rect(i, -7, 1.6, 10);
+    }
+    // wing post — white deer hair, two clumps
+    g.fill(245, 240, 225);
+    g.triangle(-6, -7, -4, -22, -1, -7);
+    g.fill(230, 225, 210);
+    g.triangle( -1, -7,  3, -19,  6, -7);
+    // head — small bead
+    g.fill(60, 45, 25);
+    g.ellipse(8, -2, 6, 5);
+  }
+
+  else if (type === 'nymph') {
+    // ---- NYMPH: gold bead head, segmented olive body, sparse legs ----
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // body — dark olive
+    g.fill(85, 75, 45);
+    g.ellipse(-4, 0, 32, 11);
+    // dark ribbing
+    g.fill(35, 30, 18, 220);
+    for (let i = -18; i < 2; i += 3) {
+      g.rect(i, -6, 1.4, 11);
+    }
+    // thorax (slightly bigger toward head)
+    g.fill(70, 60, 35);
+    g.ellipse(2, 0, 12, 11);
+    // soft hackle / legs at thorax
+    g.stroke(120, 95, 55, 220); g.strokeWeight(0.8);
+    g.line(0,  3, -4,  10);
+    g.line(0, -3, -4, -10);
+    g.line(4,  3,  0,  10);
+    g.line(4, -3,  0, -10);
+    g.line(-4, 3, -10, 8);
+    g.line(-4, -3, -10, -8);
+    g.noStroke();
+    // gold bead head
+    g.fill(70, 50, 25);
+    g.ellipse(11, -1, 11, 11);   // shadow
+    g.fill(230, 175, 70);
+    g.ellipse(10, -2, 10, 10);
+    g.fill(255, 230, 160);
+    g.ellipse(8, -4, 4, 4);
+  }
+
+  else if (type === 'woolyBugger') {
+    // ---- WOOLY BUGGER: long marabou tail, fuzzy chenille body, bead head ----
+    g.stroke(70, 60, 50); g.strokeWeight(1.5); g.noFill();
+    g.bezier(20, -2, 18, 12, 6, 16, -4, 12);
+    g.noStroke();
+    // marabou tail — wispy strands trailing off the back
+    g.stroke(35, 50, 35, 220); g.strokeWeight(1.4);
+    for (let i = 0; i < 11; i++) {
+      let baseY = (i - 5) * 1.3;
+      let endY  = baseY + (Math.sin(i * 0.7) * 4);
+      g.line(-12, baseY, -38, endY);
+    }
+    // softer outer wisps
+    g.stroke(20, 35, 25, 140); g.strokeWeight(0.8);
+    for (let i = 0; i < 6; i++) {
+      let baseY = (i - 2.5) * 2;
+      g.line(-12, baseY, -42 + Math.random() * 3, baseY * 2);
+    }
+    g.noStroke();
+    // body — fuzzy dark-olive chenille
+    g.fill(35, 50, 32);
+    g.ellipse(-3, 0, 28, 14);
+    g.fill(60, 75, 45);
+    g.ellipse(-3, -2, 24, 9);
+    // hackle palmer — spiral hackle wrap around the body
+    g.stroke(80, 100, 55, 200); g.strokeWeight(0.7);
+    for (let i = 0; i < 18; i++) {
+      let t = i / 17;
+      let bx = -16 + t * 26;
+      let phase = i * 0.55;
+      let r = 8;
+      g.line(bx, Math.cos(phase) * r, bx + 1.5, Math.cos(phase + 0.4) * r);
+      g.line(bx, Math.cos(phase) * r, bx + 2, Math.cos(phase) * (r + 3));
+    }
+    g.noStroke();
+    // gold bead head with highlight
+    g.fill(230, 175, 70);
+    g.ellipse(11, -1, 11, 11);
+    g.fill(255, 230, 160);
+    g.ellipse(9, -3, 4, 4);
+    // dark eye dot
+    g.fill(40, 30, 18);
+    g.ellipse(13, 0, 3, 3);
+  }
+
+  g.pop();
 }
 
 function buildSpeciesPortraits() {
@@ -1123,11 +1293,8 @@ function draw() {
     let moneyEl = document.getElementById('hud-money');
     let catchEl = document.getElementById('hud-catch');
     if (flyEl) {
-      let flyLabels = ['fly', 'nymph', 'woolyBugger'].map((k, i) => {
-        let unlocked = playerState.unlocks.flies[k];
-        return `[${i + 1} ${FLY_CONFIG[k].label}${unlocked ? '' : ' 🔒'}]`;
-      }).join(' ');
-      flyEl.textContent = `Fly: ${FLY_CONFIG[selectedFly].label}  ${flyLabels}`;
+      let icon = flyIcons[selectedFly] ? `<img src="${flyIcons[selectedFly]}" alt="">` : '';
+      flyEl.innerHTML = `${icon}<span>${FLY_CONFIG[selectedFly].label}</span><span style="opacity:0.65;margin-left:6px">(F to open fly box)</span>`;
     }
     if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
     if (catchEl) {
@@ -1267,6 +1434,11 @@ function keyPressed() {
   if (key === '1') trySelectFly('fly');
   if (key === '2') trySelectFly('nymph');
   if (key === '3') trySelectFly('woolyBugger');
+  if (key === 'f' || key === 'F') {
+    let box = document.getElementById('flybox');
+    if (box && box.classList.contains('hidden')) openFlyBox();
+    else closeFlyBox();
+  }
 }
 
 function toggleMenu() {
