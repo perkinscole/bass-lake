@@ -1964,6 +1964,21 @@ class Panfish {
 
   flock(panfishHash, hashCell, bass) {
     let cfg = this.cfg;
+    // SPOOK: if recently startled, sprint away from the disturbance and
+    // skip normal flocking + bite eligibility for a few seconds.
+    if (this.spookedUntil && frameCount < this.spookedUntil) {
+      let dx = this.pos.x - (this.spookFromX || this.pos.x);
+      let dy = this.pos.y - (this.spookFromY || this.pos.y);
+      let d = Math.hypot(dx, dy) || 1;
+      let burst = Math.max(0, (this.spookedUntil - frameCount) / 240);
+      let speed = this.maxSpeed * (1.0 + burst * 1.2);
+      this.vel.x = (dx / d) * speed;
+      this.vel.y = (dy / d) * speed;
+      // dive a bit deeper while fleeing so we lose track of them
+      this.z = Math.min(0.6, this.z + 0.01);
+      this.wiggle += 0.4;
+      return;
+    }
     let sep = createVector();
     let ali = createVector();
     let coh = createVector();
@@ -2235,6 +2250,29 @@ class Bass {
 
   update(panfish) {
     this.cooldown = max(0, this.cooldown - 1);
+
+    // SPOOK — bolt away from a splash that landed too close
+    if (this.spookedUntil && frameCount < this.spookedUntil) {
+      let dx = this.pos.x - (this.spookFromX || this.pos.x);
+      let dy = this.pos.y - (this.spookFromY || this.pos.y);
+      let d = Math.hypot(dx, dy) || 1;
+      let burst = Math.max(0, (this.spookedUntil - frameCount) / 240);
+      let speed = this.dashSpeed * 0.45 * (1.0 + burst * 0.8);
+      this.vel.x = (dx / d) * speed;
+      this.vel.y = (dy / d) * speed;
+      this.pos.add(this.vel);
+      this.wiggle += 0.3;
+      // dive deeper while fleeing
+      this.z = Math.min(0.95, this.z + 0.015);
+      // boundary push so they don't beach themselves
+      let inAmt = lake.insideAmount(this.pos.x, this.pos.y);
+      if (inAmt < 18) {
+        let inward = lake.inwardNormal(this.pos.x, this.pos.y);
+        this.pos.x += inward.x * 4;
+        this.pos.y += inward.y * 4;
+      }
+      return;
+    }
 
     if (this.state === 'lurk') {
       // sit nearly still — drift very slowly toward lurk point, sometimes change heading
@@ -3063,6 +3101,7 @@ class FlyCast {
         this.airHeight = 0;
         ripples.push(new Ripple(this.flyX, this.flyY, 14));
         playSound('splash', { volume: 0.7 });
+        this._spookNearbyFish();
       }
     } else if (this.state === 'fishing') {
       // Fly drifts a touch on the water surface
@@ -3243,6 +3282,26 @@ class FlyCast {
     if (this.state === 'fishing') this.state = 'reeling';
   }
 
+  _spookNearbyFish() {
+    // Landing the fly TOO close to a fish scares it — the splash sends it
+    // bolting away and it won't bite for a few seconds.
+    const SPOOK_RADIUS = 24;
+    const SPOOK_FRAMES = 240;
+    let x = this.flyX, y = this.flyY;
+    let spook = (f) => {
+      let d2 = (f.pos.x - x) ** 2 + (f.pos.y - y) ** 2;
+      if (d2 < SPOOK_RADIUS * SPOOK_RADIUS) {
+        f.spookedUntil = frameCount + SPOOK_FRAMES;
+        f.spookFromX = x;
+        f.spookFromY = y;
+        // small ripple at the fish position as it lunges away
+        if (random() < 0.6) ripples.push(new Ripple(f.pos.x, f.pos.y, 10));
+      }
+    };
+    for (let f of panfish) { if (!f.dead && !f.hooked) spook(f); }
+    for (let b of bass)    { if (!b.hooked) spook(b); }
+  }
+
   _findBitingFish() {
     let cfg = this.cfg;
     let bestD = cfg.biteRange;
@@ -3251,14 +3310,15 @@ class FlyCast {
     let levelCatches = lvl().catches[this.flyType] || [];
     let canCatch = Object.create(null);
     for (let sp of levelCatches) canCatch[sp] = true;
+    let spookedNow = (f) => f.spookedUntil && frameCount < f.spookedUntil;
     for (let f of panfish) {
-      if (f.dead || f.hooked) continue;
+      if (f.dead || f.hooked || spookedNow(f)) continue;
       if (!canCatch[f.species]) continue;
       let d = Math.hypot(f.pos.x - this.flyX, f.pos.y - this.flyY);
       if (d < bestD) { bestD = d; best = f; }
     }
     for (let b of bass) {
-      if (b.hooked) continue;
+      if (b.hooked || spookedNow(b)) continue;
       if (!canCatch[b.species]) continue;
       let d = Math.hypot(b.pos.x - this.flyX, b.pos.y - this.flyY);
       if (d < bestD) { bestD = d; best = b; }
