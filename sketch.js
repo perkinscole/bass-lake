@@ -3118,14 +3118,27 @@ class FlyCast {
     this.flightDuration = 0;
     this.driftSeed = random(1000);
     this.hookedFish = null;
-    this.fightT = 0;                       // frames since hookset
-    this.reeling = false;                  // player applying tension this frame
-    this.tension = 0;                      // 0..1 — line load. >= 1 → snap
-    this.fishStamina = 1;                  // 1 → fresh, 0 → played out
-    this.runTimer = 0;                     // frames remaining in a fish run
-    this.runCooldown = 0;                  // frames before another run can start
-    this.runDir = { x: 0, y: 0 };          // direction the current run is pulling
-    this.slackTimer = 0;                   // frames the line has been ~slack
+    this.fightT = 0;
+    this.reeling = false;
+    this.tension = 0;
+    this.fishStamina = 1;
+    this.runTimer = 0;
+    this.runCooldown = 0;
+    this.runDir = { x: 0, y: 0 };
+    this.slackTimer = 0;
+    // ---- TIMING METER (Dredge-style release rhythm) ----
+    // A cursor slides back and forth along a bar. Releasing the mouse while
+    // the cursor is in the green sweet spot = perfect cast. Off-spot =
+    // accuracy falls off (cast lands wide of the aim point) and the spook
+    // radius grows. Speeds up each frame so you can't just hover indefinitely.
+    this.timingPhase = 0;            // 0..1 — cursor position on bar
+    this.timingDir = 1;              // +1 right, -1 left
+    this.timingSpeed = 0.018;        // per-frame, grows with fightT
+    this.sweetCenter = 0.50;
+    this.sweetWidth  = 0.22;         // ±11% around center
+    this.castQuality = 0;            // 1 = perfect, 0 = miss; set on release
+    this.qualityLabel = null;        // 'PERFECT' | 'GOOD' | 'MISS' | null
+    this.qualityLabelAt = 0;
   }
 
   _rodTip() {
@@ -3150,7 +3163,6 @@ class FlyCast {
 
     if (this.state === 'aerial') {
       // Alternating false casts — line tip swings between forward and backward.
-      // Each full half-cycle (sin sign flip) extends the line a bit until max.
       const SWING_SPEED = 0.085;
       this.aerialPhase += SWING_SPEED;
       let halfCycle = Math.floor(this.aerialPhase / Math.PI);
@@ -3159,9 +3171,18 @@ class FlyCast {
         this.lastHalfCycle = halfCycle;
       }
       let aim = this._aimDir();
-      let extend = Math.sin(this.aerialPhase);   // -1..1
+      let extend = Math.sin(this.aerialPhase);
       this.flyX = r.x + aim.x * this.lineLength * extend;
       this.flyY = r.y + aim.y * this.lineLength * extend;
+
+      // Timing rhythm — cursor slides back and forth on the meter and
+      // speeds up as the cast loads. The longer you false-cast, the harder
+      // the timing window to nail. Forces a decision: deliver early in
+      // the sweet rhythm, or build line length but risk missing the spot.
+      this.timingPhase += this.timingDir * this.timingSpeed;
+      if (this.timingPhase >= 1) { this.timingPhase = 1; this.timingDir = -1; }
+      if (this.timingPhase <= 0) { this.timingPhase = 0; this.timingDir = 1; }
+      this.timingSpeed = Math.min(0.06, 0.018 + this.aerialPhase * 0.001);
     } else if (this.state === 'delivering') {
       this.flightT += (deltaTime || 16) / 1000;
       let t = constrain(this.flightT / this.flightDuration, 0, 1);
@@ -3345,17 +3366,40 @@ class FlyCast {
     playSound('cast_release');
     let r = this._rodTip();
     let aim = this._aimDir();
-    // line length determines cast distance, clamped to mouse dist if shorter
+
+    // ---- TIMING QUALITY ----
+    // Distance from the sweet-spot center as a fraction of half-window.
+    let dFromSweet = Math.abs(this.timingPhase - this.sweetCenter);
+    let halfWidth = this.sweetWidth / 2;
+    let q;
+    if (dFromSweet <= halfWidth) {
+      q = 1 - dFromSweet / halfWidth;          // 0.6..1.0 — perfect band
+      this.qualityLabel = q > 0.6 ? 'PERFECT' : 'GOOD';
+    } else {
+      let over = dFromSweet - halfWidth;       // 0..0.5
+      q = Math.max(0, 1 - over * 2.4);         // 0..~0.7 — falls off fast
+      this.qualityLabel = q > 0.3 ? 'OK' : 'WIDE';
+    }
+    this.castQuality = q;
+    this.qualityLabelAt = frameCount;
+
     let castDist = Math.min(this.lineLength, aim.dist);
+    // weak quality shortens the cast a touch — line dumps short
+    castDist *= (0.65 + q * 0.35);
     if (castDist < 60) {
-      // not enough load — abort cast
       this.state = 'done';
       return;
     }
+
+    // Accuracy error — wide casts land perpendicular to the aim axis. Up to
+    // ~25% of the cast distance off-line at quality=0.
+    let perpX = -aim.y, perpY = aim.x;
+    let err = (1 - q) * castDist * 0.25 * (random() < 0.5 ? -1 : 1);
+
     this.startX = this.flyX;
     this.startY = this.flyY;
-    this.targetX = r.x + aim.x * castDist;
-    this.targetY = r.y + aim.y * castDist;
+    this.targetX = r.x + aim.x * castDist + perpX * err;
+    this.targetY = r.y + aim.y * castDist + perpY * err;
     // Don't allow landing on land — pull the target back into water
     let attempts = 0;
     while (!lake.contains(this.targetX, this.targetY, 4) && attempts++ < 30) {
@@ -3373,17 +3417,17 @@ class FlyCast {
   }
 
   _spookNearbyFish() {
-    // Only the big sloppy presentations (wooly bugger) spook fish on landing,
-    // and only species flagged as "spooky" (trout) react. Regular bass / sunfish
-    // / crappie don't care about a heavy fly slapping the water nearby.
     if (this.flyType !== 'woolyBugger') return;
-    const SPOOK_RADIUS = 32;
+    // Cast quality modulates the spook radius. A perfect timing release lands
+    // the fly softly enough that even spooky fish only react in a small area.
+    // A wide cast slaps the water and scares everything in a much wider ring.
+    let radius = lerp(48, 14, this.castQuality);     // miss=48px, perfect=14px
     const SPOOK_FRAMES = 240;
     let x = this.flyX, y = this.flyY;
     let spook = (f) => {
       if (!SPECIES[f.species]?.spooky) return;
       let d2 = (f.pos.x - x) ** 2 + (f.pos.y - y) ** 2;
-      if (d2 < SPOOK_RADIUS * SPOOK_RADIUS) {
+      if (d2 < radius * radius) {
         f.spookedUntil = frameCount + SPOOK_FRAMES;
         f.spookFromX = x;
         f.spookFromY = y;
@@ -3479,15 +3523,48 @@ class FlyCast {
     if (this.state === 'done') return;
     let r = this._rodTip();
 
-    // Power meter (line length growing) shown above the kayak during false casts
+    // ---- Aerial HUD: power meter + timing meter above the kayak ----
     if (this.state === 'aerial') {
+      // Line-length / power bar
       let pct = (this.lineLength - 70) / (this.maxLineLength - 70);
       pct = constrain(pct, 0, 1);
       noStroke();
       fill(0, 0, 0, 140);
-      rect(player.pos.x - 22, player.pos.y - 32, 44, 6, 2);
+      rect(player.pos.x - 28, player.pos.y - 44, 56, 6, 2);
       fill(255, 200, 80);
-      rect(player.pos.x - 21, player.pos.y - 31, 42 * pct, 4, 1);
+      rect(player.pos.x - 27, player.pos.y - 43, 54 * pct, 4, 1);
+
+      // Timing rhythm bar — sweet spot highlighted; sliding cursor
+      let bx = player.pos.x - 28, by = player.pos.y - 34, bw = 56, bh = 7;
+      fill(0, 0, 0, 150);
+      rect(bx, by, bw, bh, 2);
+      // sweet spot band
+      let sStart = this.sweetCenter - this.sweetWidth / 2;
+      let sEnd   = this.sweetCenter + this.sweetWidth / 2;
+      fill(120, 220, 110, 220);
+      rect(bx + sStart * bw, by + 1, (sEnd - sStart) * bw, bh - 2, 1);
+      // sliding cursor
+      fill(255, 245, 220);
+      let cx = bx + this.timingPhase * bw;
+      rect(cx - 1, by - 1, 2, bh + 2);
+    }
+
+    // Cast-quality feedback floats briefly above the kayak after release.
+    if (this.qualityLabel && frameCount - this.qualityLabelAt < 60) {
+      let age = frameCount - this.qualityLabelAt;
+      let alpha = (1 - age / 60) * 255;
+      let yOff = -54 - age * 0.4;
+      let col = this.qualityLabel === 'PERFECT' ? [255, 230, 150]
+              : this.qualityLabel === 'GOOD'    ? [180, 230, 170]
+              : this.qualityLabel === 'OK'      ? [220, 220, 200]
+              : [255, 150, 130];
+      noStroke();
+      fill(col[0], col[1], col[2], alpha);
+      textAlign(CENTER, BOTTOM);
+      textSize(10);
+      textStyle(BOLD);
+      text(this.qualityLabel, player.pos.x, player.pos.y + yOff);
+      textStyle(NORMAL);
     }
 
     // FLY LINE
