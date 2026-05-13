@@ -86,7 +86,7 @@ const LEVELS = {
       woolyBugger: ['bass'],
     },
     rewards: { bluegill: 5, pumpkinseed: 8, crappie: 15, bass: 40 },
-    spawn:   { bluegill: 100, pumpkinseed: 56, crappie: 67, bass: 9 },
+    spawn:   { bluegill: 100, pumpkinseed: 56, crappie: 67, bass: 22 },
     propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110 },
     unlocked: true,
     unlockCost: 0,
@@ -1215,7 +1215,7 @@ function draw() {
     else                panfishTarget += levelSpawn[sp];
   }
 
-  if (bass.length < bassTarget && frameCount % 600 === 0) {
+  if (bass.length < bassTarget && frameCount % 360 === 0) {
     let lowest = _underrepresentedSpecies(bass, levelSpawn, 'bass');
     let p = lake.randomEdgePoint(random(0.78, 0.93));
     bass.push(new Bass(p.x, p.y, lowest));
