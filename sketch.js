@@ -14,6 +14,7 @@ let rocks = [];
 let ducks = [];                       // surface birds, drift around the lake
 let eagle = null;                     // active bald eagle, null when none
 let eagleSpawnCooldown = 1200;        // frames until next eagle attempt
+let worldSeed = null;                 // seed the whole world was generated from
 let player;        // the kayak the user controls
 let cast = null;   // active fly cast (null when not cast)
 let MAX_CAST_RANGE = 220;       // current cast range (depends on rod tier)
@@ -364,6 +365,46 @@ const keys = {};
 function setup() {
   createCanvas(windowWidth, windowHeight);
   loadProgress();
+  buildWorld(seedFromURL());
+  finishSetup();
+}
+
+// If a ?seed= param is present (e.g. a derby join link), use it so this
+// client generates the exact same lake as everyone else in that derby.
+function seedFromURL() {
+  try {
+    let s = new URLSearchParams(location.search).get('seed');
+    if (s == null) return null;
+    return hashSeed(s);
+  } catch { return null; }
+}
+
+// Turn any string (a derby pin, a share code) into a stable 32-bit integer
+// seed. Same string in -> same number out, on every machine.
+function hashSeed(str) {
+  str = String(str);
+  let h = 2166136261 >>> 0;            // FNV-1a
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % 1e9;
+}
+
+// Build (or rebuild) the entire procedural world from a seed. The same seed
+// always yields the same lake, props, and fish layout — this is what lets
+// every player in a derby fish an identical lake. Pass null for a fresh
+// random world (normal single-player).
+function buildWorld(seed) {
+  worldSeed = (seed == null) ? (Date.now() % 1e9) : seed;
+  randomSeed(worldSeed);
+  noiseSeed(worldSeed);
+
+  // wipe any world that was here before so rebuilds are clean
+  panfish = []; bass = []; lilypads = []; weeds = []; trees = [];
+  logs = []; cattails = []; rocks = []; ducks = [];
+  ripples = []; bubbles = []; eagle = null;
+
   lake = new Lake(WORLD_W, WORLD_H);
 
   // spawn the kayak in the first basin and center the camera on it
@@ -459,6 +500,17 @@ function setup() {
   }
 
   buildStaticImage();
+
+  // Re-randomize the cosmetic RNG. World layout is now locked in; from here
+  // on random() drives per-frame animation (eagle timers, paddle pitch,
+  // wander noise) which should NOT be in lockstep across clients on a seed.
+  randomSeed((Date.now() + (performance.now() * 1000 | 0)) % 1e9);
+  noiseSeed((Date.now() ^ 0x9e3779b9) >>> 0);
+}
+
+// One-time wiring (UI, sounds, event listeners). Runs once per page load and
+// must NOT be repeated when buildWorld() rebuilds the lake.
+function finishSetup() {
   buildSpeciesPortraits();
   buildFlyIcons();
   populateLevelGroup();
