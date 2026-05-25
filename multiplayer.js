@@ -299,6 +299,48 @@ setInterval(() => {
   }
 }, 1000);
 
+// ---------------------------------------------------------------------------
+// Scoring (Phase 5)
+// ----------------------------------------------------------------------------
+// recordCatch() inserts a row into `catches`; a Postgres trigger then sums
+// that player's catches into derby_players.score atomically. Because
+// authenticated users no longer have UPDATE rights on the score column,
+// the only way to change your score is to actually land a fish.
+// ---------------------------------------------------------------------------
+
+MP.recordCatch = async function ({ species, weight, points }) {
+  if (!MP.currentDerby || MP.currentDerby.status !== 'live') return;
+  const { error } = await MP.client.from('catches').insert({
+    derby_id:  MP.currentDerby.id,
+    player_id: MP.userId,
+    species,
+    weight,
+    points,
+  });
+  if (error) console.warn('[MP] recordCatch failed:', error.message);
+};
+
+// Host ends the derby — flips status to 'done', which every client gets via
+// the existing realtime UPDATE subscription.
+MP.endDerby = async function () {
+  if (!MP.currentDerby) return;
+  if (MP.currentDerby.host_id !== MP.userId) return;
+  const { data, error } = await MP.client.from('derbies')
+    .update({ status: 'done' })
+    .eq('id', MP.currentDerby.id).select().single();
+  if (error) { console.warn('[MP] endDerby failed:', error.message); return; }
+  MP.currentDerby = data;
+  MP._emit();
+};
+
+// Seconds remaining in the current derby (0 if over or not live).
+MP.secondsRemaining = function () {
+  const d = MP.currentDerby;
+  if (!d || d.status !== 'live' || !d.end_at) return 0;
+  const ms = new Date(d.end_at).getTime() - Date.now();
+  return Math.max(0, Math.round(ms / 1000));
+};
+
 MP._refreshRoster = async function () {
   if (!MP.currentDerby) return;
   const { data } = await MP.client.from('derby_players')

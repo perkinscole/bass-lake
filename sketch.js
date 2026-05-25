@@ -1353,6 +1353,9 @@ function draw() {
 
   pop();
 
+  // ---- Derby HUD (timer + leaderboard) — only renders while a derby is live ----
+  if (frameCount % 12 === 0) tickDerbyHud();
+
   // ---- HUD updates (HTML overlay) ----
   if (frameCount % 6 === 0) {
     let flyEl = document.getElementById('hud-fly');
@@ -1420,12 +1423,14 @@ function draw() {
           toast.dataset.species = key;
           let portrait = speciesPortraits[lastCatchToast.species];
           let imgTag = portrait ? `<img src="${portrait}" alt="${lastCatchToast.species}">` : '';
-          let moneyTag = lastCatchToast.money ? `<div class="reward">+$${lastCatchToast.money}</div>` : '';
+          let rewardTag = lastCatchToast.points
+            ? `<div class="reward">+${lastCatchToast.points} pts</div>`
+            : (lastCatchToast.money ? `<div class="reward">+$${lastCatchToast.money}</div>` : '');
           toast.innerHTML =
             `<div class="card">${imgTag}` +
             `<div class="label">Catch!</div>` +
             `<div class="species">${lastCatchToast.species}</div>` +
-            moneyTag +
+            rewardTag +
             `</div>`;
         }
         toast.style.opacity = age < HOLD_FRAMES ? '1' : `${1 - (age - HOLD_FRAMES) / FADE_FRAMES}`;
@@ -3715,11 +3720,19 @@ class FlyCast {
   _onCatch() {
     if (this.hookedFish) {
       let species = this.hookedFish.species;
+      let weight  = this.hookedFish.size || 1;
       catchCount[species] = (catchCount[species] || 0) + 1;
       let reward = (lvl().rewards && lvl().rewards[species]) || REWARDS[species] || 0;
-      playerState.money += reward;
-      saveProgress();
-      lastCatchToast = { species, time: frameCount, money: reward };
+      // In a live derby, points go to the cloud leaderboard instead of cash.
+      // Single-player keeps the dollar reward; derby money is paid out at the
+      // end based on placement (see showDerbyResults()).
+      if (derbyLive && window.MP && MP.currentDerby && MP.currentDerby.status === 'live') {
+        MP.recordCatch({ species, weight: Math.round(weight * 10) / 10, points: reward });
+      } else {
+        playerState.money += reward;
+        saveProgress();
+      }
+      lastCatchToast = { species, time: frameCount, money: derbyLive ? 0 : reward, points: derbyLive ? reward : 0 };
       playSound('catch');
       stopLoop('reel_loop');
       let idx = panfish.indexOf(this.hookedFish);
@@ -4222,10 +4235,22 @@ function wireDerbyUI() {
     });
   });
 
-  // React to lobby state changes (roster updates, host starts) ---------
+  // React to lobby state changes (roster updates, host starts, derby ends) -
   MP.onLobbyChange(({ derby: d }) => {
     refreshDerbyView();
     if (d && d.status === 'live' && !derbyLive) enterDerbyWorld(d);
+    if (d && d.status === 'done' && !derbyResultsShown) showDerbyResults();
+  });
+
+  // Close-results -> back to menu, clear current derby
+  document.getElementById('results-close')?.addEventListener('click', async () => {
+    document.getElementById('derby-results')?.classList.add('hidden');
+    document.getElementById('menu')?.classList.remove('hidden');
+    menuOpen = true;
+    derbyResultsShown = false;
+    derbyLive = false;
+    try { history.replaceState(null, '', location.pathname); } catch {}
+    if (window.MP) { try { await MP.leaveDerby(); } catch {} }
   });
 
   // Auto-join via ?pin=ABC123 (share-link entry point) -----------------
@@ -4370,15 +4395,138 @@ function drawGhostKayak(x, y, heading, paddlePhase, name) {
 
 function enterDerbyWorld(d) {
   derbyLive = true;
+  derbyResultsShown = false;
   try { history.replaceState(null, '', '?pin=' + d.pin); } catch {}
 
   if (LEVELS[d.level] && currentLevel !== d.level) currentLevel = d.level;
 
   document.getElementById('derby')?.classList.add('hidden');
   document.getElementById('menu')?.classList.add('hidden');
+  document.getElementById('derby-hud')?.classList.remove('hidden');
   menuOpen = false;
 
   buildWorld(d.lake_seed);
   try { unlockAudio(); } catch {}
+}
+
+// ----------------------------------------------------------------------------
+// Live derby HUD: countdown + leaderboard. Cheap to call — only touches the
+// DOM, runs at 5 Hz from draw(). Also handles the host's "time's up" trigger.
+// ----------------------------------------------------------------------------
+
+let derbyResultsShown = false;
+
+function tickDerbyHud() {
+  const hud = document.getElementById('derby-hud');
+  if (!hud || !window.MP) return;
+  const d = MP.currentDerby;
+  if (!d || d.status !== 'live') {
+    if (!hud.classList.contains('hidden')) hud.classList.add('hidden');
+    return;
+  }
+  hud.classList.remove('hidden');
+
+  // Timer
+  const secs = MP.secondsRemaining();
+  const t = document.getElementById('derby-timer');
+  if (t) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    t.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+    t.classList.toggle('warn', secs <= 15);
+  }
+
+  // Leaderboard — derby_players UPDATEs from the scoring trigger fire the
+  // realtime sub which calls _refreshRoster, so MP.roster is always fresh.
+  const board = document.getElementById('derby-board');
+  if (board) {
+    const sorted = [...(MP.roster || [])].sort((a, b) =>
+      (b.score || 0) - (a.score || 0) || a.joined_at.localeCompare(b.joined_at));
+    board.innerHTML = sorted.slice(0, 8).map((p, i) => {
+      const you = p.player_id === MP.userId ? ' you' : '';
+      return `<div class="derby-board-row${you}">` +
+             `<span class="rk">${i + 1}</span>` +
+             `<span class="nm">${escapeHtmlGlobal(p.name)}</span>` +
+             `<span class="sc">${p.score || 0}</span></div>`;
+    }).join('') || '<div style="color:rgba(180,200,210,0.5);font-style:italic;padding:6px;">(no scores yet)</div>';
+  }
+
+  // Host ends the derby exactly once when time runs out.
+  if (secs <= 0 && d.host_id === MP.userId) {
+    if (!tickDerbyHud._endedFor || tickDerbyHud._endedFor !== d.id) {
+      tickDerbyHud._endedFor = d.id;
+      MP.endDerby();
+    }
+  }
+}
+
+function showDerbyResults() {
+  derbyResultsShown = true;
+  document.getElementById('derby-hud')?.classList.add('hidden');
+  const card = document.getElementById('derby-results');
+  if (!card) return;
+
+  const d = MP.currentDerby;
+  const sorted = [...(MP.roster || [])].sort((a, b) =>
+    (b.score || 0) - (a.score || 0) || a.joined_at.localeCompare(b.joined_at));
+
+  const myRank = sorted.findIndex(p => p.player_id === MP.userId);
+
+  // Money tiers — only paid out when at least 2 anglers participated, so
+  // you can't host a 1-player derby to mint money.
+  const PRIZES = [200, 100, 50];
+  const minPlayers = [2, 3, 4];
+  let prize = 0;
+  if (myRank >= 0 && myRank < PRIZES.length && sorted.length >= minPlayers[myRank]) {
+    prize = PRIZES[myRank];
+  }
+
+  // Pay out once, then save progress.
+  if (prize > 0 && !showDerbyResults._paidFor.has(d.id)) {
+    showDerbyResults._paidFor.add(d.id);
+    playerState.money += prize;
+    saveProgress();
+  }
+
+  document.getElementById('results-subtitle').textContent =
+    (d.level === 'alpineLake' ? 'Alpine Lake' : 'Bass Lake') + ' · ' +
+    Math.round(d.duration_secs / 60) + ' min · ' + sorted.length + ' angler' + (sorted.length === 1 ? '' : 's');
+
+  const board = document.getElementById('results-board');
+  board.innerHTML = sorted.map((p, i) => {
+    const cls = ['results-row'];
+    if (i === 0) cls.push('first');
+    else if (i === 1) cls.push('second');
+    else if (i === 2) cls.push('third');
+    if (p.player_id === MP.userId) cls.push('you');
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    return `<div class="${cls.join(' ')}">
+      <div class="rank">${medal}</div>
+      <div class="name">${escapeHtmlGlobal(p.name)}${p.player_id === MP.userId ? '<span class="meta">YOU</span>' : ''}</div>
+      <div class="score">${p.score || 0}</div>
+    </div>`;
+  }).join('');
+
+  const rewardEl = document.getElementById('results-reward');
+  if (prize > 0) {
+    rewardEl.textContent = `+$${prize}`;
+  } else if (myRank === 0) {
+    rewardEl.textContent = '(prizes need 2+ anglers)';
+    rewardEl.style.color = 'rgba(180, 200, 210, 0.6)';
+    rewardEl.style.fontStyle = 'italic';
+  } else {
+    rewardEl.textContent = '';
+  }
+
+  card.classList.remove('hidden');
+}
+showDerbyResults._paidFor = new Set();
+
+// shared in-world html-escape (the derby UI defines its own; this one is
+// for HUD updates that don't go through the closure)
+function escapeHtmlGlobal(s) {
+  return String(s ?? '').replace(/[<>&"']/g, c => ({
+    '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;',
+  }[c]));
 }
 

@@ -120,6 +120,24 @@
     </div>
   </div>
 
+  <!-- Live derby HUD — countdown timer + leaderboard, shown only during a derby -->
+  <div id="derby-hud" class="hidden">
+    <div class="derby-timer" id="derby-timer">5:00</div>
+    <div class="derby-board-title">Leaderboard</div>
+    <div class="derby-board" id="derby-board"></div>
+  </div>
+
+  <!-- Derby results — shown when status flips to 'done' -->
+  <div id="derby-results" class="hidden">
+    <div class="results-card">
+      <div class="results-title">Derby Over</div>
+      <div class="results-subtitle" id="results-subtitle">Final standings</div>
+      <div class="results-board" id="results-board"></div>
+      <div class="results-reward" id="results-reward"></div>
+      <button id="results-close">Back to Menu</button>
+    </div>
+  </div>
+
   <!-- Derby modal — host or join a multiplayer fishing derby -->
   <div id="derby" class="hidden">
     <div class="derby-card">
@@ -633,6 +651,103 @@
       padding: 10px;
       font: 600 13px -apple-system, system-ui, sans-serif;
       letter-spacing: 1px;
+      cursor: pointer;
+    }
+
+    /* ---- DERBY HUD (live leaderboard + countdown) ---- */
+    #derby-hud {
+      position: fixed; top: 10px; right: 10px;
+      z-index: 12; pointer-events: none;
+      background: rgba(20, 35, 30, 0.78);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      border-radius: 10px;
+      padding: 10px 12px 12px;
+      min-width: 200px; max-width: 240px;
+      color: rgba(220, 230, 240, 0.92);
+      font: 12px/1.3 -apple-system, system-ui, sans-serif;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    }
+    #derby-hud.hidden { display: none; }
+    #derby-hud .derby-timer {
+      font: 700 26px/1 'SF Mono', Menlo, monospace;
+      color: rgba(255, 230, 150, 0.95);
+      text-align: center; letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    #derby-hud .derby-timer.warn { color: rgba(255, 140, 100, 0.98); }
+    #derby-hud .derby-board-title {
+      color: rgba(255, 220, 130, 0.75);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      margin-bottom: 6px;
+    }
+    #derby-hud .derby-board-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 6px;
+      border-bottom: 1px solid rgba(255, 220, 130, 0.1);
+      font-size: 12px;
+    }
+    #derby-hud .derby-board-row.you { color: rgba(190, 230, 130, 0.98); font-weight: 700; }
+    #derby-hud .derby-board-row .rk { width: 18px; color: rgba(255, 220, 130, 0.7); font-weight: 700; }
+    #derby-hud .derby-board-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #derby-hud .derby-board-row .sc { font: 700 12px 'SF Mono', Menlo, monospace; color: rgba(255, 230, 150, 0.95); }
+
+    /* ---- DERBY RESULTS ---- */
+    #derby-results {
+      position: fixed; inset: 0;
+      background: rgba(10, 22, 18, 0.86);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 130;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    #derby-results.hidden { display: none; }
+    #derby-results .results-card {
+      background: linear-gradient(135deg, rgba(22, 38, 32, 0.98), rgba(12, 24, 20, 0.98));
+      border: 2px solid rgba(255, 220, 130, 0.55);
+      border-radius: 14px;
+      padding: 26px 32px 24px;
+      width: 440px; max-width: 92vw; max-height: 86vh;
+      overflow-y: auto;
+      color: rgba(220, 230, 240, 0.92);
+      font: 14px/1.4 -apple-system, system-ui, sans-serif;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.75);
+      text-align: center;
+    }
+    #derby-results .results-title {
+      font: 700 28px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.98);
+      letter-spacing: 1.5px;
+      margin-bottom: 4px;
+    }
+    #derby-results .results-subtitle { color: rgba(180, 200, 210, 0.75); font-size: 13px; margin-bottom: 18px; }
+    #derby-results .results-board { margin-bottom: 16px; }
+    #derby-results .results-row {
+      display: grid; grid-template-columns: 32px 1fr auto;
+      gap: 12px; align-items: center;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px;
+      padding: 10px 14px; margin-bottom: 6px;
+      text-align: left;
+    }
+    #derby-results .results-row.first  { border-color: rgba(255, 215, 80, 0.7); background: rgba(255, 215, 80, 0.10); }
+    #derby-results .results-row.second { border-color: rgba(200, 200, 215, 0.6); background: rgba(200, 200, 215, 0.07); }
+    #derby-results .results-row.third  { border-color: rgba(205, 135, 65, 0.6); background: rgba(205, 135, 65, 0.07); }
+    #derby-results .results-row.you    { box-shadow: inset 0 0 0 1px rgba(190, 230, 130, 0.6); }
+    #derby-results .results-row .rank  { font: 700 18px 'Georgia', serif; color: rgba(255, 230, 150, 0.95); text-align: center; }
+    #derby-results .results-row .name  { color: rgba(255, 230, 150, 0.95); font-weight: 600; }
+    #derby-results .results-row .name .meta { display: block; color: rgba(180, 200, 210, 0.65); font-size: 11px; font-weight: 400; margin-top: 2px; }
+    #derby-results .results-row .score { font: 700 16px 'SF Mono', Menlo, monospace; color: rgba(255, 230, 150, 0.95); }
+    #derby-results .results-reward {
+      color: rgba(190, 230, 130, 0.95);
+      font: 700 18px 'SF Mono', Menlo, monospace;
+      margin-bottom: 16px;
+      min-height: 24px;
+    }
+    #derby-results #results-close {
+      width: 100%; background: rgba(255, 220, 130, 0.92); color: rgba(20, 35, 30, 0.95);
+      border: none; border-radius: 8px; padding: 11px;
+      font: 700 13px -apple-system, system-ui, sans-serif; letter-spacing: 1px;
       cursor: pointer;
     }
 
