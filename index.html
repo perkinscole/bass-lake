@@ -928,21 +928,46 @@
       /* Stop double-tap-zoom on every derby button */
       #derby button, #derby-results button { touch-action: manipulation; }
 
-      /* In-game leaderboard HUD on mobile: horizontal strip just above the
-         joystick / cast button, full-width. Avoids the fly-bar (top-right),
-         the menu/mute buttons (top-left), the joystick (bottom-left), and
-         the cast button (bottom-right). */
+      /* In-game leaderboard HUD on mobile: SLIM horizontal pill in the gap
+         between the menu button (top-left) and the fly-bar (top-right).
+         Stays out of the play area entirely. */
       #derby-hud {
-        top: auto; bottom: 158px; left: 12px; right: 12px;
+        top: 6px; bottom: auto;
+        left: 56px;             /* clear of menu (left:12-48) */
+        right: 130px;           /* clear of fly-bar (~120px wide on right) */
+        transform: none;
         min-width: 0; max-width: none;
-        padding: 6px 10px 8px;
-        display: grid; grid-template-columns: auto 1fr; gap: 0 10px;
-        align-items: start;
+        padding: 4px 8px 5px;
+        display: flex; flex-direction: row; align-items: center; gap: 8px;
+        flex-wrap: nowrap;
+        white-space: nowrap;
+        overflow: hidden;
       }
-      #derby-hud .derby-timer { font-size: 20px; margin: 0; padding-top: 2px; align-self: center; }
-      #derby-hud .derby-board-title { grid-column: 2; margin-bottom: 2px; font-size: 9px; }
-      #derby-hud .derby-board { grid-column: 2; }
-      #derby-hud .derby-board-row { padding: 2px 0; font-size: 11px; }
+      #derby-hud .derby-timer {
+        font-size: 14px; margin: 0; padding: 0;
+        letter-spacing: 1px;
+      }
+      #derby-hud .derby-board-title { display: none; }
+      #derby-hud .derby-board {
+        display: flex; gap: 8px; align-items: center; overflow: hidden;
+        flex: 1; min-width: 0;
+      }
+      #derby-hud .derby-board-row {
+        display: inline-flex; gap: 3px;
+        padding: 0; border: none;
+        font-size: 11px; line-height: 1;
+      }
+      #derby-hud .derby-board-row .rk { width: auto; min-width: 10px; }
+      #derby-hud .derby-board-row .nm {
+        max-width: 50px; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap;
+      }
+      #derby-hud .derby-board-row .sc { font-size: 11px; }
+      /* Mobile strip shows top 2; tickDerbyHud swaps "you" into row 2 if
+         you're outside the top 2 so you always see your own score */
+      #derby-hud .derby-board-row:nth-child(n+3) { display: none; }
+      /* Push sonar (also top-center) down while the derby HUD is on top */
+      body.derby-live #sonar { top: 36px; }
 
       /* During a live derby, hide the regular top-left text HUD so the
          catch-toast and timer aren't competing for attention. */
@@ -1187,8 +1212,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=9"></script>
-  <script src="sprites.js?v=9"></script>
-  <script src="sketch.js?v=9"></script>
+  <script src="multiplayer.js?v=10"></script>
+  <script src="sprites.js?v=10"></script>
+  <script src="sketch.js?v=10"></script>
 </body>
 </html>

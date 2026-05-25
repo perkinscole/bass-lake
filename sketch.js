@@ -599,15 +599,20 @@ function initTouchControls() {
     let mag = Math.hypot(dx, dy);
     if (mag > MAX_R) { dx = (dx / mag) * MAX_R; dy = (dy / mag) * MAX_R; }
     stick.style.transform = `translate(${dx}px, ${dy}px)`;
-    let nx = dx / MAX_R, ny = dy / MAX_R;
-    keys.left  = nx < -DEADZONE;
-    keys.right = nx >  DEADZONE;
-    keys.up    = ny < -DEADZONE;
-    keys.down  = ny >  DEADZONE;
+    // Absolute-direction steering: stick angle = world heading you want to go.
+    // The kayak rotates toward that angle and paddles forward automatically.
+    const norm = Math.min(mag / MAX_R, 1);
+    if (player) {
+      if (norm < DEADZONE) {
+        player.mobileAim = null;
+      } else {
+        player.mobileAim = { dx, dy, mag: norm };
+      }
+    }
   };
   let resetStick = () => {
     stick.style.transform = 'translate(0,0)';
-    keys.left = keys.right = keys.up = keys.down = false;
+    if (player) player.mobileAim = null;
     activePointer = null;
   };
   base.addEventListener('pointerdown', e => {
@@ -627,14 +632,40 @@ function initTouchControls() {
     });
   });
 
-  // Cast button — touch and hold to false-cast, release to deliver. On mobile
-  // the cast goes in the direction of the kayak's current heading (no cursor).
+  // Cast button — touch to start a cast, DRAG the finger off the button in
+  // the direction you want to cast (top-down aim), release to deliver. While
+  // dragging we update the cast target so the false-cast line previews where
+  // the fly will land.
   let castBtn = document.getElementById('cast-btn');
   let castPointer = null;
+  let castStartX = 0, castStartY = 0;
+  const DRAG_DEADZONE = 16;  // ignore tiny finger wobble
+
+  let aimCastFromDrag = (dx, dy) => {
+    const mag = Math.hypot(dx, dy);
+    let wx, wy;
+    if (mag < DRAG_DEADZONE) {
+      // No real drag yet — aim straight ahead of the kayak
+      const aheadDist = MAX_CAST_RANGE * 0.9;
+      wx = player.pos.x + Math.cos(player.heading) * aheadDist;
+      wy = player.pos.y + Math.sin(player.heading) * aheadDist;
+    } else {
+      // Drag direction = aim direction (top-down), distance up to MAX
+      const nx = dx / mag, ny = dy / mag;
+      const reach = Math.min(mag * 3, MAX_CAST_RANGE * 0.95); // longer drag = farther cast preview
+      wx = player.pos.x + nx * reach;
+      wy = player.pos.y + ny * reach;
+    }
+    window.mouseX = (wx - cam.x) * zoom;
+    window.mouseY = (wy - cam.y) * zoom;
+  };
+
   castBtn.addEventListener('pointerdown', e => {
     if (menuOpen) return;
     unlockAudio();
     castPointer = e.pointerId;
+    castStartX = e.clientX;
+    castStartY = e.clientY;
     castBtn.setPointerCapture(e.pointerId);
     castBtn.classList.add('charging');
     if (cast && cast.state === 'hooked') {
@@ -648,14 +679,15 @@ function initTouchControls() {
       return;
     }
     if (cast && cast.state !== 'done') return;
-    let aheadDist = MAX_CAST_RANGE * 0.9;
-    let wx = player.pos.x + Math.cos(player.heading) * aheadDist;
-    let wy = player.pos.y + Math.sin(player.heading) * aheadDist;
-    window.mouseX = (wx - cam.x) * zoom;
-    window.mouseY = (wy - cam.y) * zoom;
+    aimCastFromDrag(0, 0);   // initial aim — straight ahead
     cast = new FlyCast();
     playSound('cast_start');
     e.preventDefault();
+  });
+  castBtn.addEventListener('pointermove', e => {
+    if (e.pointerId !== castPointer) return;
+    if (!cast || cast.state !== 'aerial') return;   // only aim during the back-and-forth
+    aimCastFromDrag(e.clientX - castStartX, e.clientY - castStartY);
   });
   let endCast = (e) => {
     if (e.pointerId !== castPointer) return;
@@ -2709,6 +2741,9 @@ class Kayak {
     this.acceleration = 0.22;
     this.friction = 0.93;
     this.wakeCooldown = 0;
+    // Mobile joystick can set this to drive absolute-direction steering
+    // instead of A/D turn + W/S paddle. { dx, dy, mag } in screen pixels.
+    this.mobileAim = null;
   }
 
   update() {
@@ -2719,11 +2754,30 @@ class Kayak {
     const BACKWARD_ACC = 0.13;
 
     let turn = 0;
-    if (keys.left)  turn -= 1;
-    if (keys.right) turn += 1;
     let thrust = 0;
-    if (keys.up)    thrust += 1;
-    if (keys.down)  thrust -= 0.7;     // backpaddle is weaker
+
+    if (this.mobileAim && this.mobileAim.mag > 0) {
+      // Mobile mode: stick angle is the desired world-space heading, stick
+      // magnitude is the throttle. The kayak rotates toward the stick angle
+      // and paddles automatically — no separate "turn" then "forward" step.
+      const target = Math.atan2(this.mobileAim.dy, this.mobileAim.dx);
+      let diff = target - this.heading;
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      // Turn rate proportional to angle error, clamped to ±1
+      turn = Math.max(-1, Math.min(1, diff / 0.25));
+      // Throttle scales with both stick magnitude AND how aligned we are with
+      // the target — so the kayak pivots first then accelerates, which feels
+      // natural and avoids drifting sideways at full speed.
+      const alignment = (Math.cos(diff) + 1) * 0.5;   // 0..1
+      thrust = this.mobileAim.mag * (0.3 + 0.7 * alignment);
+    } else {
+      // Keyboard/desktop: classic A/D turn + W/S paddle.
+      if (keys.left)  turn -= 1;
+      if (keys.right) turn += 1;
+      if (keys.up)    thrust += 1;
+      if (keys.down)  thrust -= 0.7;     // backpaddle is weaker
+    }
 
     // turn rate scales slightly with speed so the kayak feels like it's
     // pivoting around the paddler, not on a dime
@@ -2735,7 +2789,7 @@ class Kayak {
       this.vel.x += Math.cos(this.heading) * acc * thrust;
       this.vel.y += Math.sin(this.heading) * acc * thrust;
       let prev = this.paddlePhase;
-      this.paddlePhase += 0.22;
+      this.paddlePhase += 0.22 * Math.min(1, Math.abs(thrust));
       // sound: detect paddle-stroke beat — sin sign flip = side switch
       if (Math.sign(Math.sin(prev)) !== Math.sign(Math.sin(this.paddlePhase))) {
         playSound('paddle', { volume: 0.45, rate: 0.9 + Math.random() * 0.2 });
@@ -4470,10 +4524,20 @@ function tickDerbyHud() {
   if (board) {
     const sorted = [...(MP.roster || [])].sort((a, b) =>
       (b.score || 0) - (a.score || 0) || a.joined_at.localeCompare(b.joined_at));
-    board.innerHTML = sorted.slice(0, 8).map((p, i) => {
+    // Build the list so "you" is always one of the visible rows — even if
+    // CSS chops the list to top 2 on mobile, the player sees their own
+    // standing. Rank labels still reflect true position from sort.
+    const youIdx = sorted.findIndex(p => p.player_id === MP.userId);
+    let rows = sorted.map((p, i) => ({ p, rank: i + 1 }));
+    // If you exist and you're outside the top 2, swap you into position 2
+    // (still showing #1, so the visible mobile pair becomes "#1 + you").
+    if (youIdx > 1) {
+      rows = [rows[0], { p: sorted[youIdx], rank: youIdx + 1 }, ...rows.slice(1).filter(r => r.p.player_id !== MP.userId)];
+    }
+    board.innerHTML = rows.slice(0, 8).map(({ p, rank }) => {
       const you = p.player_id === MP.userId ? ' you' : '';
       return `<div class="derby-board-row${you}">` +
-             `<span class="rk">${i + 1}</span>` +
+             `<span class="rk">${rank}</span>` +
              `<span class="nm">${escapeHtmlGlobal(p.name)}</span>` +
              `<span class="sc">${p.score || 0}</span></div>`;
     }).join('') || '<div style="color:rgba(180,200,210,0.5);font-style:italic;padding:6px;">(no scores yet)</div>';
