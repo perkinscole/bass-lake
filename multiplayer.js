@@ -175,11 +175,24 @@ MP.joinDerbyById = async function (derbyId) {
 };
 
 MP._joinSelf = async function (derbyId) {
-  const { error } = await MP.client.from('derby_players').upsert(
-    { derby_id: derbyId, player_id: MP.userId, name: MP.getPlayerName() },
-    { onConflict: 'derby_id,player_id' }
-  );
-  if (error) throw error;
+  // Insert-then-update instead of upsert. PostgREST's upsert emits
+  // INSERT ... ON CONFLICT DO UPDATE, which is sensitive to lingering
+  // column-level grants on derby_players from earlier Phase 5 SQL.
+  // Two plain CRUD calls work cleanly regardless of grant history.
+  const name = MP.getPlayerName();
+  const ins = await MP.client.from('derby_players').insert({
+    derby_id: derbyId, player_id: MP.userId, name,
+  });
+  if (!ins.error) return;
+  if (ins.error.code === '23505') {
+    // Already in this derby — just refresh the name.
+    const upd = await MP.client.from('derby_players')
+      .update({ name })
+      .eq('derby_id', derbyId).eq('player_id', MP.userId);
+    if (upd.error) throw upd.error;
+    return;
+  }
+  throw ins.error;
 };
 
 MP.leaveDerby = async function () {
