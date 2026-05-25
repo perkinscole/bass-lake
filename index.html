@@ -105,6 +105,7 @@
 
       <div class="menu-actions">
         <button id="shop-button" class="secondary">Tackle Shop</button>
+        <button id="derby-button" class="secondary">Multiplayer</button>
         <button id="start-button">Cast Off</button>
       </div>
     </div>
@@ -116,6 +117,76 @@
       <div class="flybox-title">Fly Box</div>
       <div class="flybox-grid" id="flybox-grid"></div>
       <button id="flybox-close">Close</button>
+    </div>
+  </div>
+
+  <!-- Derby modal — host or join a multiplayer fishing derby -->
+  <div id="derby" class="hidden">
+    <div class="derby-card">
+      <div class="derby-header">
+        <div class="derby-title">Fishing Derby</div>
+        <button id="derby-close-x" class="x" aria-label="close">×</button>
+      </div>
+      <div class="derby-tabs">
+        <button data-tab="host"   class="derby-tab active">Host</button>
+        <button data-tab="join"   class="derby-tab">Join by Pin</button>
+        <button data-tab="browse" class="derby-tab">Browse</button>
+      </div>
+      <div class="derby-name-row">
+        <label>Your name</label>
+        <input id="derby-name" maxlength="24" />
+      </div>
+      <div class="derby-body">
+        <div data-pane="host" class="derby-pane">
+          <div class="derby-row"><label>Lake</label>
+            <select id="derby-host-level">
+              <option value="bassLake">Bass Lake — panfish + bass</option>
+              <option value="alpineLake">Alpine Lake — trout</option>
+            </select>
+          </div>
+          <div class="derby-row"><label>Length</label>
+            <select id="derby-host-duration">
+              <option value="180">3 min — sprint</option>
+              <option value="300" selected>5 min — standard</option>
+              <option value="600">10 min — long</option>
+              <option value="1200">20 min — marathon</option>
+            </select>
+          </div>
+          <div class="derby-row"><label>Visibility</label>
+            <select id="derby-host-public">
+              <option value="true">Public — show in Browse</option>
+              <option value="false">Private — pin only</option>
+            </select>
+          </div>
+          <button id="derby-host-create" class="derby-primary">Create Derby</button>
+        </div>
+        <div data-pane="join" class="derby-pane" hidden>
+          <div class="derby-row"><label>Pin</label>
+            <input id="derby-join-pin" maxlength="8" placeholder="ABC123" autocapitalize="characters" />
+          </div>
+          <button id="derby-join-go" class="derby-primary">Join</button>
+          <div id="derby-join-err" class="derby-err"></div>
+        </div>
+        <div data-pane="browse" class="derby-pane" hidden>
+          <div id="derby-browse-list" class="derby-list"><div class="empty">Loading…</div></div>
+          <button id="derby-browse-refresh" class="derby-secondary">Refresh</button>
+        </div>
+        <div data-pane="lobby" class="derby-pane" hidden>
+          <div class="derby-lobby-info">
+            <div><span>Pin</span><b id="derby-lobby-pin">—</b></div>
+            <div><span>Lake</span><b id="derby-lobby-level">—</b></div>
+            <div><span>Length</span><b id="derby-lobby-duration">—</b></div>
+          </div>
+          <div class="derby-share" id="derby-share" title="click to copy">share link…</div>
+          <div class="derby-roster-title">Anglers</div>
+          <div id="derby-roster" class="derby-roster"></div>
+          <div class="derby-lobby-actions">
+            <button id="derby-leave" class="derby-secondary">Leave</button>
+            <button id="derby-start" class="derby-primary" hidden>Start Derby</button>
+          </div>
+          <div class="derby-waiting" id="derby-waiting" hidden>Waiting for the host to start…</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -564,6 +635,108 @@
       letter-spacing: 1px;
       cursor: pointer;
     }
+
+    /* ---- DERBY (multiplayer lobby) ---- */
+    #derby {
+      position: fixed; inset: 0; background: rgba(10, 22, 18, 0.84);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 110;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    #derby.hidden { display: none; }
+    #derby .derby-card {
+      background: linear-gradient(135deg, rgba(22, 38, 32, 0.98), rgba(12, 24, 20, 0.98));
+      border: 2px solid rgba(255, 220, 130, 0.5);
+      border-radius: 12px;
+      padding: 20px 24px 22px;
+      width: 480px; max-width: 92vw; max-height: 88vh;
+      overflow-y: auto;
+      color: rgba(220, 230, 240, 0.92);
+      font: 14px/1.4 -apple-system, system-ui, sans-serif;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    #derby .derby-header { display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 220, 130, 0.25); }
+    #derby .derby-title { font: 700 22px/1 'Georgia', serif; color: rgba(255, 230, 150, 0.95); letter-spacing: 1px; }
+    #derby .x { background: none; border: none; color: rgba(220, 230, 240, 0.7);
+      font-size: 24px; cursor: pointer; line-height: 1; padding: 0 4px; }
+    #derby .x:hover { color: rgba(255, 220, 130, 0.95); }
+    #derby .derby-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+    #derby .derby-tab {
+      flex: 1; background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      color: rgba(220, 230, 240, 0.75);
+      border-radius: 6px; padding: 8px;
+      font: 600 12px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px; cursor: pointer;
+    }
+    #derby .derby-tab.active { background: rgba(255, 220, 130, 0.18);
+      color: rgba(255, 230, 150, 0.95); border-color: rgba(255, 220, 130, 0.55); }
+    #derby .derby-name-row, #derby .derby-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    #derby .derby-name-row label, #derby .derby-row label { width: 90px; color: rgba(220, 230, 240, 0.7); font-size: 13px; }
+    #derby input, #derby select {
+      flex: 1; background: rgba(0,0,0,0.35); color: rgba(220, 240, 220, 0.95);
+      border: 1px solid rgba(255, 220, 130, 0.25); border-radius: 6px;
+      padding: 7px 10px; font: 14px -apple-system, system-ui, sans-serif;
+    }
+    #derby #derby-join-pin { letter-spacing: 4px; text-transform: uppercase; font-weight: 700; }
+    #derby .derby-primary {
+      width: 100%; background: rgba(255, 220, 130, 0.92); color: rgba(20, 35, 30, 0.95);
+      border: none; border-radius: 8px; padding: 10px;
+      font: 700 13px -apple-system, system-ui, sans-serif; letter-spacing: 1px;
+      cursor: pointer; margin-top: 6px;
+    }
+    #derby .derby-primary:disabled { opacity: 0.5; cursor: wait; }
+    #derby .derby-secondary {
+      background: rgba(0,0,0,0.35); border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 220, 130, 0.9); border-radius: 6px; padding: 8px 14px;
+      font: 600 12px -apple-system, system-ui, sans-serif; cursor: pointer;
+    }
+    #derby .derby-err { color: rgba(255, 140, 120, 0.95); font-size: 12px; margin-top: 10px; min-height: 16px; }
+    #derby .derby-list { max-height: 260px; overflow-y: auto; margin-bottom: 12px; }
+    #derby .derby-list-item {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px; padding: 9px 12px; margin-bottom: 6px;
+    }
+    #derby .derby-list-item .meta { color: rgba(180, 200, 210, 0.75); font-size: 12px; margin-top: 2px; }
+    #derby .derby-list-item button {
+      background: rgba(255, 220, 130, 0.88); color: rgba(20, 35, 30, 0.95);
+      border: none; border-radius: 5px; padding: 6px 14px;
+      font: 700 11px -apple-system, system-ui, sans-serif; cursor: pointer; letter-spacing: 0.5px;
+    }
+    #derby .derby-list .empty { color: rgba(180, 200, 210, 0.6); text-align: center; padding: 18px; font-style: italic; }
+    #derby .derby-lobby-info {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;
+    }
+    #derby .derby-lobby-info div { display: flex; flex-direction: column; }
+    #derby .derby-lobby-info span { color: rgba(180, 200, 210, 0.65); font-size: 10px;
+      text-transform: uppercase; letter-spacing: 1px; }
+    #derby .derby-lobby-info b { color: rgba(255, 230, 150, 0.95);
+      font: 700 16px 'SF Mono', Menlo, monospace; letter-spacing: 1px; }
+    #derby .derby-share {
+      background: rgba(0,0,0,0.35); border: 1px dashed rgba(255, 220, 130, 0.4);
+      border-radius: 6px; padding: 7px 10px; font: 11px 'SF Mono', Menlo, monospace;
+      color: rgba(220, 240, 220, 0.85); margin-bottom: 14px; cursor: pointer; word-break: break-all;
+    }
+    #derby .derby-share.copied { color: rgba(190, 230, 130, 0.95); border-color: rgba(190, 230, 130, 0.55); border-style: solid; }
+    #derby .derby-roster-title { color: rgba(255, 230, 150, 0.85); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+    #derby .derby-roster { max-height: 180px; overflow-y: auto; margin-bottom: 14px; }
+    #derby .roster-row {
+      display: flex; justify-content: space-between; align-items: center;
+      background: rgba(0,0,0,0.2); border-radius: 6px; padding: 7px 12px; margin-bottom: 4px;
+    }
+    #derby .roster-row .tags { display: flex; gap: 6px; }
+    #derby .roster-row .you { color: rgba(190, 230, 130, 0.95); font-size: 10px; letter-spacing: 1px; }
+    #derby .roster-row .host { color: rgba(255, 220, 130, 0.95); font-size: 10px; letter-spacing: 1px; }
+    #derby .derby-lobby-actions { display: flex; gap: 10px; }
+    #derby .derby-lobby-actions .derby-primary { flex: 2; margin-top: 0; }
+    #derby .derby-lobby-actions .derby-secondary { flex: 1; }
+    #derby .derby-waiting { color: rgba(180, 200, 210, 0.7); text-align: center;
+      font-style: italic; font-size: 12px; margin-top: 10px; }
     .fly-btn.locked {
       opacity: 0.35;
       filter: grayscale(0.5);

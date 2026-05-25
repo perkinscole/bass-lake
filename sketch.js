@@ -369,11 +369,12 @@ function setup() {
   finishSetup();
 }
 
-// If a ?seed= param is present (e.g. a derby join link), use it so this
-// client generates the exact same lake as everyone else in that derby.
+// If a ?seed= or ?pin= param is present (a derby join link), seed the world
+// from it so this client's lake matches everyone else's in that derby.
 function seedFromURL() {
   try {
-    let s = new URLSearchParams(location.search).get('seed');
+    let q = new URLSearchParams(location.search);
+    let s = q.get('seed') ?? q.get('pin');
     if (s == null) return null;
     return hashSeed(s);
   } catch { return null; }
@@ -529,6 +530,7 @@ function finishSetup() {
     populateShop();
     document.getElementById('shop').classList.remove('hidden');
   });
+  wireDerbyUI();
   let shopClose = document.getElementById('shop-close');
   if (shopClose) shopClose.addEventListener('click', () => {
     document.getElementById('shop').classList.add('hidden');
@@ -4077,3 +4079,216 @@ function drawRock(r) {
   fill(r.shade + 30, r.shade + 30, r.shade + 30, 200);
   ellipse(r.x - r.r * 0.2, r.y - r.r * 0.25, r.r * 0.7, r.r * 0.4);
 }
+
+// ============================================================================
+// Multiplayer / derby UI wiring (Phase 3)
+// ----------------------------------------------------------------------------
+// Opt-in: if multiplayer.js failed to connect, the modal still opens but
+// actions error out — single-player play is unaffected.
+// ============================================================================
+
+let derbyLive = false;          // true once the host has started a derby
+
+function wireDerbyUI() {
+  if (!window.MP) return;
+  const $ = (id) => document.getElementById(id);
+  const modal = $('derby');
+  if (!modal) return;
+
+  const openModal  = () => { modal.classList.remove('hidden'); refreshDerbyView(); };
+  const closeModal = () => modal.classList.add('hidden');
+
+  $('derby-button')?.addEventListener('click', openModal);
+  $('derby-close-x')?.addEventListener('click', closeModal);
+
+  // Tabs ----------------------------------------------------------------
+  const tabs  = modal.querySelectorAll('.derby-tab');
+  const panes = modal.querySelectorAll('.derby-pane');
+  function showPane(name) {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    panes.forEach(p => p.hidden = (p.dataset.pane !== name));
+    if (name === 'browse') refreshBrowseList();
+  }
+  tabs.forEach(t => t.addEventListener('click', () => {
+    if (MP.currentDerby) return;        // can't tab away while in a lobby
+    showPane(t.dataset.tab);
+  }));
+
+  // Name field ----------------------------------------------------------
+  const nameInput = $('derby-name');
+  if (nameInput) {
+    nameInput.value = MP.getPlayerName();
+    nameInput.addEventListener('change', () => MP.setPlayerName(nameInput.value));
+  }
+
+  // Host ----------------------------------------------------------------
+  $('derby-host-create')?.addEventListener('click', async () => {
+    const btn = $('derby-host-create');
+    btn.disabled = true; btn.textContent = 'Creating…';
+    try {
+      await MP.createDerby({
+        level:    $('derby-host-level').value,
+        duration: parseInt($('derby-host-duration').value, 10),
+        isPublic: $('derby-host-public').value === 'true',
+      });
+      showPane('lobby');
+    } catch (e) {
+      alert('Could not create derby: ' + (e.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Derby';
+    }
+  });
+
+  // Join by pin ---------------------------------------------------------
+  $('derby-join-go')?.addEventListener('click', async () => {
+    const pin = $('derby-join-pin').value;
+    const err = $('derby-join-err');
+    err.textContent = '';
+    try { await MP.joinDerbyByPin(pin); showPane('lobby'); }
+    catch (e) { err.textContent = e.message || String(e); }
+  });
+
+  // Browse --------------------------------------------------------------
+  $('derby-browse-refresh')?.addEventListener('click', refreshBrowseList);
+
+  async function refreshBrowseList() {
+    const list = $('derby-browse-list');
+    list.innerHTML = '<div class="empty">Loading…</div>';
+    try {
+      const rows = await MP.listOpenDerbies();
+      if (!rows.length) {
+        list.innerHTML = '<div class="empty">No open derbies — host one!</div>';
+        return;
+      }
+      list.innerHTML = rows.map(r => {
+        const n    = (r.derby_players || []).length;
+        const lake = r.level === 'alpineLake' ? 'Alpine Lake' : 'Bass Lake';
+        const mins = Math.round(r.duration_secs / 60);
+        return `<div class="derby-list-item">
+          <div>
+            <div><b>${escapeHtml(r.pin)}</b> · ${lake}</div>
+            <div class="meta">${mins} min · ${n} angler${n === 1 ? '' : 's'}</div>
+          </div>
+          <button data-id="${r.id}">Join</button>
+        </div>`;
+      }).join('');
+      list.querySelectorAll('button[data-id]').forEach(b => {
+        b.addEventListener('click', async () => {
+          try { await MP.joinDerbyById(b.dataset.id); showPane('lobby'); }
+          catch (e) { alert('Could not join: ' + (e.message || e)); }
+        });
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="empty">Error: ' + escapeHtml(e.message || String(e)) + '</div>';
+    }
+  }
+
+  // Lobby actions -------------------------------------------------------
+  $('derby-leave')?.addEventListener('click', async () => {
+    await MP.leaveDerby();
+    derbyLive = false;
+    showPane('host');
+  });
+
+  $('derby-start')?.addEventListener('click', async () => {
+    const btn = $('derby-start');
+    btn.disabled = true; btn.textContent = 'Starting…';
+    try { await MP.startDerby(); }
+    catch (e) { alert('Could not start: ' + (e.message || e)); }
+    finally { btn.disabled = false; btn.textContent = 'Start Derby'; }
+  });
+
+  $('derby-share')?.addEventListener('click', () => {
+    const link = derbyShareLink();
+    if (!link) return;
+    navigator.clipboard?.writeText(link).then(() => {
+      const el = $('derby-share');
+      el.classList.add('copied');
+      const old = el.textContent;
+      el.textContent = 'copied! ' + link;
+      setTimeout(() => { el.classList.remove('copied'); el.textContent = old; }, 1600);
+    });
+  });
+
+  // React to lobby state changes (roster updates, host starts) ---------
+  MP.onLobbyChange(({ derby: d }) => {
+    refreshDerbyView();
+    if (d && d.status === 'live' && !derbyLive) enterDerbyWorld(d);
+  });
+
+  // Auto-join via ?pin=ABC123 (share-link entry point) -----------------
+  try {
+    const urlPin = new URLSearchParams(location.search).get('pin');
+    if (urlPin) {
+      MP.whenReady()
+        .then(() => MP.joinDerbyByPin(urlPin))
+        .then(() => { openModal(); showPane('lobby'); })
+        .catch(e => console.warn('[MP] auto-join failed:', e.message || e));
+    }
+  } catch {}
+
+  function refreshDerbyView() {
+    if (!MP.currentDerby) return;
+    const d = MP.currentDerby;
+    showPane('lobby');
+    $('derby-lobby-pin').textContent      = d.pin;
+    $('derby-lobby-level').textContent    = (LEVELS[d.level]?.name) || d.level;
+    $('derby-lobby-duration').textContent = Math.round(d.duration_secs / 60) + ' min';
+    $('derby-share').textContent          = derbyShareLink();
+
+    const isHost  = d.host_id === MP.userId;
+    const inLobby = d.status === 'lobby';
+    $('derby-start').hidden   = !(isHost && inLobby);
+    $('derby-waiting').hidden = (isHost || !inLobby);
+
+    const ros = $('derby-roster');
+    if (!MP.roster.length) {
+      ros.innerHTML = '<div class="empty" style="padding:10px;color:rgba(180,200,210,0.5);font-style:italic;">Just you for now…</div>';
+    } else {
+      ros.innerHTML = MP.roster.map(p => {
+        const tags = [];
+        if (p.player_id === d.host_id) tags.push('<span class="host">HOST</span>');
+        if (p.player_id === MP.userId) tags.push('<span class="you">YOU</span>');
+        return `<div class="roster-row">
+          <span>${escapeHtml(p.name)}</span>
+          <span class="tags">${tags.join('')}</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  function derbyShareLink() {
+    if (!MP.currentDerby) return '';
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete('seed');
+      u.searchParams.set('pin', MP.currentDerby.pin);
+      return u.toString();
+    } catch { return ''; }
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[<>&"']/g, c => ({
+      '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+}
+
+// The host pressed "Start" — every client receives the realtime UPDATE on
+// the derby row and lands here. Swap to the right biome, rebuild the world
+// with the shared seed so everyone fishes an identical lake, and drop the
+// player straight into the game.
+function enterDerbyWorld(d) {
+  derbyLive = true;
+  try { history.replaceState(null, '', '?pin=' + d.pin); } catch {}
+
+  if (LEVELS[d.level] && currentLevel !== d.level) currentLevel = d.level;
+
+  document.getElementById('derby')?.classList.add('hidden');
+  document.getElementById('menu')?.classList.add('hidden');
+  menuOpen = false;
+
+  buildWorld(d.lake_seed);
+  try { unlockAudio(); } catch {}
+}
+
