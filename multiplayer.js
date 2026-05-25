@@ -200,6 +200,7 @@ MP.leaveDerby = async function () {
     }
   } catch {}
   if (MP._lobbyCh) { try { await MP.client.removeChannel(MP._lobbyCh); } catch {} }
+  if (MP._lobbyPoll) { clearInterval(MP._lobbyPoll); MP._lobbyPoll = null; }
   MP._lobbyCh = null;
   MP.currentDerby = null;
   MP.roster = [];
@@ -250,7 +251,8 @@ MP.startDerby = async function () {
 };
 
 MP._subscribeLobby = async function (derbyId) {
-  if (MP._lobbyCh) { try { await MP.client.removeChannel(MP._lobbyCh); } catch {} }
+  if (MP._lobbyCh)   { try { await MP.client.removeChannel(MP._lobbyCh); } catch {} }
+  if (MP._lobbyPoll) { clearInterval(MP._lobbyPoll); MP._lobbyPoll = null; }
   MP.roster = [];
   MP.ghosts.clear();
   // self:false means we don't echo our own position broadcasts back to ourselves
@@ -261,12 +263,35 @@ MP._subscribeLobby = async function (derbyId) {
   );
   ch.on('postgres_changes',
     { event: 'UPDATE', schema: 'public', table: 'derbies', filter: 'id=eq.' + derbyId },
-    (payload) => { MP.currentDerby = payload.new; MP._emit(); }
+    (payload) => {
+      console.log('[MP] derby update received:', payload.new?.status);
+      MP._applyDerbyRow(payload.new);
+    }
   );
   ch.on('broadcast', { event: 'pos' }, MP._handlePos);
   await ch.subscribe();
   MP._lobbyCh = ch;
   await MP._refreshRoster();
+
+  // Safety-net poll: if the realtime UPDATE event ever gets dropped (network
+  // hiccup, NAT timeout, throttled channel), we still pick up the host's
+  // status change within a few seconds. Polls only while in lobby state.
+  MP._lobbyPoll = setInterval(async () => {
+    if (!MP.currentDerby || MP.currentDerby.status !== 'lobby') return;
+    const { data } = await MP.client.from('derbies').select('*').eq('id', derbyId).maybeSingle();
+    if (data && data.status !== MP.currentDerby.status) {
+      console.log('[MP] poll detected status change:', data.status);
+      MP._applyDerbyRow(data);
+    }
+  }, 2500);
+};
+
+// Centralized handler for new derby-row state. Used by both the realtime
+// UPDATE handler and the poll fallback so they share exactly one code path.
+MP._applyDerbyRow = function (row) {
+  if (!row) return;
+  MP.currentDerby = row;
+  MP._emit();
 };
 
 // ---------------------------------------------------------------------------
