@@ -190,6 +190,7 @@ MP.leaveDerby = async function () {
   MP._lobbyCh = null;
   MP.currentDerby = null;
   MP.roster = [];
+  if (MP.ghosts) MP.ghosts.clear();
   MP._emit();
 };
 
@@ -220,7 +221,9 @@ MP.startDerby = async function () {
 MP._subscribeLobby = async function (derbyId) {
   if (MP._lobbyCh) { try { await MP.client.removeChannel(MP._lobbyCh); } catch {} }
   MP.roster = [];
-  const ch = MP.client.channel('lobby-' + derbyId);
+  MP.ghosts.clear();
+  // self:false means we don't echo our own position broadcasts back to ourselves
+  const ch = MP.client.channel('lobby-' + derbyId, { config: { broadcast: { self: false } } });
   ch.on('postgres_changes',
     { event: '*', schema: 'public', table: 'derby_players', filter: 'derby_id=eq.' + derbyId },
     () => MP._refreshRoster()
@@ -229,10 +232,72 @@ MP._subscribeLobby = async function (derbyId) {
     { event: 'UPDATE', schema: 'public', table: 'derbies', filter: 'id=eq.' + derbyId },
     (payload) => { MP.currentDerby = payload.new; MP._emit(); }
   );
+  ch.on('broadcast', { event: 'pos' }, MP._handlePos);
   await ch.subscribe();
   MP._lobbyCh = ch;
   await MP._refreshRoster();
 };
+
+// ---------------------------------------------------------------------------
+// Ghost kayaks — broadcast position to everyone in the derby (Phase 4)
+// ----------------------------------------------------------------------------
+// We use Supabase Realtime's `broadcast` event (NOT the database) — ephemeral,
+// no writes, ~10 Hz is fine for a casual fishing game. Each peer renders the
+// others' kayaks with interpolation between the last two received positions.
+// ---------------------------------------------------------------------------
+
+MP.ghosts    = new Map();   // player_id -> interpolation-ready position snapshot
+MP._lastSent = 0;
+
+MP._handlePos = function (raw) {
+  const p = raw && raw.payload;
+  if (!p || !p.id || p.id === MP.userId) return;
+  const now = performance.now();
+  let g = MP.ghosts.get(p.id);
+  if (!g) {
+    g = {
+      name: p.name || 'Angler',
+      x: p.x, y: p.y, h: p.h, pp: p.pp || 0,
+      prevX: p.x, prevY: p.y, prevH: p.h,
+      recvT: now, prevRecvT: now - 100,
+      lastSeen: now,
+    };
+    MP.ghosts.set(p.id, g);
+  } else {
+    g.prevX = g.x; g.prevY = g.y; g.prevH = g.h;
+    g.prevRecvT = g.recvT;
+    g.recvT = now;
+    g.x = p.x; g.y = p.y; g.h = p.h; g.pp = p.pp || 0;
+    if (p.name) g.name = p.name;
+    g.lastSeen = now;
+  }
+};
+
+MP.broadcastPosition = function ({ x, y, heading, paddlePhase }) {
+  if (!MP._lobbyCh || !MP.currentDerby || MP.currentDerby.status !== 'live') return;
+  const now = performance.now();
+  if (now - MP._lastSent < 100) return;   // ~10 Hz cap
+  MP._lastSent = now;
+  MP._lobbyCh.send({
+    type: 'broadcast', event: 'pos',
+    payload: {
+      id:   MP.userId,
+      name: MP.getPlayerName(),
+      x:    Math.round(x),
+      y:    Math.round(y),
+      h:    Math.round(heading * 1000) / 1000,
+      pp:   Math.round((paddlePhase || 0) * 100) / 100,
+    },
+  });
+};
+
+// Drop ghosts we haven't heard from in 5s (tab closed, network blip, etc.)
+setInterval(() => {
+  const now = performance.now();
+  for (const [id, g] of MP.ghosts) {
+    if (now - g.lastSeen > 5000) MP.ghosts.delete(id);
+  }
+}, 1000);
 
 MP._refreshRoster = async function () {
   if (!MP.currentDerby) return;

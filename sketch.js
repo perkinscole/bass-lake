@@ -1302,6 +1302,18 @@ function draw() {
   // kayak floats on top of lily pads (it's at the surface)
   player.draw();
 
+  // Ghost kayaks for everyone else in the derby — same layer as the local
+  // kayak, drawn with a translucent body + a name label above each.
+  drawDerbyGhosts();
+
+  // Broadcast our own position to peers (~10 Hz cap inside MP.broadcastPosition)
+  if (window.MP && MP.broadcastPosition) {
+    MP.broadcastPosition({
+      x: player.pos.x, y: player.pos.y,
+      heading: player.heading, paddlePhase: player.paddlePhase,
+    });
+  }
+
   // fly line + fly — drawn after kayak so the line connects cleanly to the rod
   if (cast) {
     cast.update();
@@ -4278,6 +4290,84 @@ function wireDerbyUI() {
 // the derby row and lands here. Swap to the right biome, rebuild the world
 // with the shared seed so everyone fishes an identical lake, and drop the
 // player straight into the game.
+// Render every other player's kayak. Positions arrive at ~10 Hz; we
+// interpolate between the last two received snapshots so motion looks
+// smooth at 60 fps even though the wire only ticks 10× per second.
+function drawDerbyGhosts() {
+  if (!window.MP || !MP.ghosts || MP.ghosts.size === 0) return;
+  const now = performance.now();
+  for (const g of MP.ghosts.values()) {
+    const span = Math.max(50, g.recvT - g.prevRecvT);
+    // Lerp from prev->current over the gap, and let it extrapolate up to
+    // half a tick past the latest sample so movement keeps flowing.
+    const t  = constrain((now - g.prevRecvT) / span, 0, 1.5);
+    const x  = lerp(g.prevX, g.x, t);
+    const y  = lerp(g.prevY, g.y, t);
+    const h  = lerpAngle(g.prevH, g.h, t);
+    drawGhostKayak(x, y, h, g.pp, g.name);
+  }
+}
+
+function lerpAngle(a, b, t) {
+  let d = b - a;
+  while (d >  Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+// Simplified kayak silhouette — translucent so the local player still pops,
+// distinguished by a cyan PFD vs the player's orange one.
+function drawGhostKayak(x, y, heading, paddlePhase, name) {
+  push();
+  translate(x, y);
+  rotate(heading);
+  const s = 22;
+  noStroke();
+  // hull shadow
+  fill(0, 0, 0, 70);
+  ellipse(2, 4, s * 2.7, s * 0.95);
+  // hull
+  fill(45, 55, 80, 210);
+  ellipse(0, 0, s * 2.5, s * 0.8);
+  fill(85, 100, 130, 210);
+  ellipse(0, -s * 0.02, s * 2.2, s * 0.55);
+  // cockpit
+  fill(15, 20, 28, 210);
+  ellipse(s * 0.05, 0, s * 0.85, s * 0.42);
+  // PFD — cyan to read as "someone else"
+  fill(70, 180, 220, 230);
+  ellipse(s * 0.05, 0, s * 0.55, s * 0.4);
+  // head
+  fill(225, 195, 155, 230);
+  ellipse(s * 0.05, 0, s * 0.28, s * 0.28);
+  // tiny paddle motion — animate from received paddlePhase
+  stroke(50, 35, 22, 200);
+  strokeWeight(2);
+  const px = s * 0.05;
+  const py = Math.sin(paddlePhase || 0) * s * 0.7;
+  line(px, -s * 0.85, px, s * 0.85);
+  noStroke();
+  // blade hint on the active side
+  fill(60, 45, 30, 220);
+  ellipse(px, py, s * 0.3, s * 0.5);
+  pop();
+
+  // Name label above the kayak, counter-scaled so zoom doesn't shrink text.
+  push();
+  translate(x, y - 38);
+  if (typeof zoom === 'number' && zoom > 0) scale(1 / zoom);
+  noStroke();
+  fill(0, 0, 0, 150);
+  rectMode(CENTER);
+  rect(0, 0, Math.max(50, (name || '').length * 6.5 + 14), 16, 4);
+  rectMode(CORNER);
+  fill(220, 240, 220, 245);
+  textAlign(CENTER, CENTER);
+  textSize(11);
+  text(name || 'Angler', 0, 0);
+  pop();
+}
+
 function enterDerbyWorld(d) {
   derbyLive = true;
   try { history.replaceState(null, '', '?pin=' + d.pin); } catch {}
