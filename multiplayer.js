@@ -184,8 +184,21 @@ MP._joinSelf = async function (derbyId) {
 
 MP.leaveDerby = async function () {
   if (!MP.currentDerby) return;
-  const did = MP.currentDerby.id;
-  try { await MP.client.from('derby_players').delete().eq('derby_id', did).eq('player_id', MP.userId); } catch {}
+  const did    = MP.currentDerby.id;
+  const isHost = MP.currentDerby.host_id === MP.userId;
+  const isLive = MP.currentDerby.status === 'live';
+  try {
+    // If the host bails out of the lobby (before kickoff), nuke the whole
+    // derby — otherwise it'd sit in Browse forever as an abandoned lobby
+    // with no host to start it. Once the derby is live we leave it alone
+    // so the catches table keeps its FK target.
+    if (isHost && !isLive) {
+      await MP.client.from('derbies').delete().eq('id', did);
+    } else {
+      await MP.client.from('derby_players').delete()
+        .eq('derby_id', did).eq('player_id', MP.userId);
+    }
+  } catch {}
   if (MP._lobbyCh) { try { await MP.client.removeChannel(MP._lobbyCh); } catch {} }
   MP._lobbyCh = null;
   MP.currentDerby = null;
@@ -196,12 +209,30 @@ MP.leaveDerby = async function () {
 
 MP.listOpenDerbies = async function () {
   await MP.whenReady();
+  // Stale-cutoff: anything older than an hour was almost certainly abandoned
+  // (browser closed, host walked away). Hides them from Browse without
+  // needing a cleanup job.
+  const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { data, error } = await MP.client.from('derbies')
     .select('*, derby_players(player_id)')
     .eq('is_public', true).eq('status', 'lobby')
+    .gte('created_at', cutoff)
     .order('created_at', { ascending: false }).limit(20);
   if (error) throw error;
   return data || [];
+};
+
+// Watch the open-lobbies list in realtime so the Browse pane updates the
+// instant someone hosts (or leaves). Returns an async unsubscribe fn.
+MP.watchOpenDerbies = async function (onChange) {
+  await MP.whenReady();
+  const ch = MP.client.channel('open-derbies-' + Math.random().toString(36).slice(2));
+  ch.on('postgres_changes',
+    { event: '*', schema: 'public', table: 'derbies' },
+    () => { try { onChange(); } catch (e) { console.warn(e); } }
+  );
+  await ch.subscribe();
+  return async () => { try { await MP.client.removeChannel(ch); } catch {} };
 };
 
 MP.startDerby = async function () {

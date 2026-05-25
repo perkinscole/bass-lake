@@ -4129,15 +4129,39 @@ function wireDerbyUI() {
   // Tabs ----------------------------------------------------------------
   const tabs  = modal.querySelectorAll('.derby-tab');
   const panes = modal.querySelectorAll('.derby-pane');
+  let browseUnsub = null;
+  let browseRefreshDebounce = null;
+  let browsePoll = null;
+  async function startBrowseWatch() {
+    if (!browseUnsub) {
+      // Realtime catches new lobbies appearing instantly. Debounced because
+      // a single host action can trigger a burst (insert + roster upsert).
+      browseUnsub = await MP.watchOpenDerbies(() => {
+        clearTimeout(browseRefreshDebounce);
+        browseRefreshDebounce = setTimeout(refreshBrowseList, 250);
+      });
+    }
+    // Safety-net poll for events realtime can drop (notably DELETE without
+    // replica-identity-full): refresh every 5s while Browse is open.
+    if (!browsePoll) browsePoll = setInterval(refreshBrowseList, 5000);
+  }
+  async function stopBrowseWatch() {
+    if (browsePoll) { clearInterval(browsePoll); browsePoll = null; }
+    if (browseUnsub) { const u = browseUnsub; browseUnsub = null; try { await u(); } catch {} }
+  }
   function showPane(name) {
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     panes.forEach(p => p.hidden = (p.dataset.pane !== name));
-    if (name === 'browse') refreshBrowseList();
+    if (name === 'browse') { refreshBrowseList(); startBrowseWatch(); }
+    else stopBrowseWatch();
   }
   tabs.forEach(t => t.addEventListener('click', () => {
     if (MP.currentDerby) return;        // can't tab away while in a lobby
     showPane(t.dataset.tab);
   }));
+
+  // Stop watching when the modal closes (saves the realtime channel)
+  $('derby-close-x')?.addEventListener('click', stopBrowseWatch);
 
   // Name field ----------------------------------------------------------
   const nameInput = $('derby-name');
