@@ -4236,6 +4236,7 @@ function wireDerbyUI() {
   $('derby-leave')?.addEventListener('click', async () => {
     await MP.leaveDerby();
     derbyLive = false;
+    document.body.classList.remove('derby-live');
     showPane('host');
   });
 
@@ -4270,6 +4271,7 @@ function wireDerbyUI() {
   document.getElementById('results-close')?.addEventListener('click', async () => {
     document.getElementById('derby-results')?.classList.add('hidden');
     document.getElementById('menu')?.classList.remove('hidden');
+    document.body.classList.remove('derby-live');
     menuOpen = true;
     derbyResultsShown = false;
     derbyLive = false;
@@ -4427,6 +4429,8 @@ function enterDerbyWorld(d) {
   document.getElementById('derby')?.classList.add('hidden');
   document.getElementById('menu')?.classList.add('hidden');
   document.getElementById('derby-hud')?.classList.remove('hidden');
+  // body class drives mobile-only CSS (hide regular HUD, etc.)
+  document.body.classList.add('derby-live');
   menuOpen = false;
 
   buildWorld(d.lake_seed);

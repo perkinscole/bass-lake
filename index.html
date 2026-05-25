@@ -180,7 +180,9 @@
         </div>
         <div data-pane="join" class="derby-pane" hidden>
           <div class="derby-row"><label>Pin</label>
-            <input id="derby-join-pin" maxlength="8" placeholder="ABC123" autocapitalize="characters" />
+            <input id="derby-join-pin" maxlength="8" placeholder="ABC123"
+                   autocapitalize="characters" autocomplete="off" autocorrect="off"
+                   spellcheck="false" inputmode="text" />
           </div>
           <button id="derby-join-go" class="derby-primary">Join</button>
           <div id="derby-join-err" class="derby-err"></div>
@@ -852,6 +854,57 @@
     #derby .derby-lobby-actions .derby-secondary { flex: 1; }
     #derby .derby-waiting { color: rgba(180, 200, 210, 0.7); text-align: center;
       font-style: italic; font-size: 12px; margin-top: 10px; }
+
+    /* ---- MOBILE — derby modal, HUD, and results ---- */
+    @media (pointer: coarse), (max-width: 720px) {
+      /* Modal: pad in from edges, tighten interior, prevent iOS zoom-on-focus
+         (form fields must be >=16px or iOS auto-zooms when focused) */
+      #derby .derby-card {
+        padding: 16px 16px 18px;
+        max-height: 92vh;
+      }
+      #derby .derby-title { font-size: 19px; letter-spacing: 0.5px; }
+      #derby input, #derby select { font-size: 16px; padding: 10px 10px; }
+      #derby #derby-join-pin { font-size: 22px; letter-spacing: 6px; text-align: center; }
+      #derby .derby-name-row label, #derby .derby-row label { width: 72px; font-size: 12px; }
+      /* Bigger tap targets */
+      #derby .derby-tab        { padding: 10px 6px; }
+      #derby .derby-primary    { padding: 14px; font-size: 14px; }
+      #derby .derby-secondary  { padding: 10px 14px; font-size: 13px; }
+      #derby .derby-list-item  { padding: 12px; }
+      #derby .derby-list-item button { padding: 10px 16px; font-size: 12px; }
+      /* Lobby info: stack the three cells on very narrow screens */
+      #derby .derby-lobby-info { grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 10px; }
+      #derby .derby-lobby-info > div:nth-child(3) { grid-column: 1 / -1; }
+      /* Stop double-tap-zoom on every derby button */
+      #derby button, #derby-results button { touch-action: manipulation; }
+
+      /* In-game leaderboard HUD on mobile: horizontal strip just above the
+         joystick / cast button, full-width. Avoids the fly-bar (top-right),
+         the menu/mute buttons (top-left), the joystick (bottom-left), and
+         the cast button (bottom-right). */
+      #derby-hud {
+        top: auto; bottom: 158px; left: 12px; right: 12px;
+        min-width: 0; max-width: none;
+        padding: 6px 10px 8px;
+        display: grid; grid-template-columns: auto 1fr; gap: 0 10px;
+        align-items: start;
+      }
+      #derby-hud .derby-timer { font-size: 20px; margin: 0; padding-top: 2px; align-self: center; }
+      #derby-hud .derby-board-title { grid-column: 2; margin-bottom: 2px; font-size: 9px; }
+      #derby-hud .derby-board { grid-column: 2; }
+      #derby-hud .derby-board-row { padding: 2px 0; font-size: 11px; }
+
+      /* During a live derby, hide the regular top-left text HUD so the
+         catch-toast and timer aren't competing for attention. */
+      body.derby-live #hud { display: none; }
+
+      /* Results screen: tighten paddings, allow scroll */
+      #derby-results .results-card { padding: 18px 18px 16px; }
+      #derby-results .results-title { font-size: 22px; }
+      #derby-results .results-row { padding: 12px; }
+      #derby-results #results-close { padding: 14px; font-size: 14px; touch-action: manipulation; }
+    }
     .fly-btn.locked {
       opacity: 0.35;
       filter: grayscale(0.5);
@@ -1085,8 +1138,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=6"></script>
-  <script src="sprites.js?v=6"></script>
-  <script src="sketch.js?v=6"></script>
+  <script src="multiplayer.js?v=7"></script>
+  <script src="sprites.js?v=7"></script>
+  <script src="sketch.js?v=7"></script>
 </body>
 </html>
