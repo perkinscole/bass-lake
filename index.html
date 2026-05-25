@@ -447,6 +447,55 @@
       font-size: 14px;
     }
 
+    /* ---- MOBILE — main menu fits a portrait phone ---- */
+    @media (pointer: coarse), (max-width: 720px) {
+      /* Menu is a column that scrolls within viewport — no clipping at edges */
+      #menu {
+        align-items: flex-start;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      #menu .menu-card {
+        width: calc(100vw - 20px);
+        max-width: calc(100vw - 20px);
+        margin: 10px auto;
+        padding: 18px 16px 18px;
+        box-sizing: border-box;
+      }
+      #menu .title    { font-size: 30px; letter-spacing: 1px; margin-bottom: 4px; }
+      #menu .tagline  { font-size: 12px; margin-bottom: 16px; }
+
+      /* Level cards stack on narrow screens; full width each */
+      #menu .level-group { gap: 8px; margin-bottom: 16px; }
+      #menu .level-card  { flex: 1 1 100%; padding: 10px 12px; }
+
+      /* Fly grid: smaller images, tighter gap — still fits 3 columns */
+      #menu .fly-grid { gap: 6px; margin-bottom: 16px; }
+      #menu .fly-card { padding: 6px 4px; }
+      #menu .fly-card img { width: 100%; max-width: 90px; }
+      #menu .fly-card .name { font-size: 12px; }
+      #menu .fly-card .target { font-size: 9px; letter-spacing: 0.5px; }
+
+      /* Controls list compacted — fine without keyboard hints on mobile */
+      #menu .controls { padding: 10px 12px; margin-bottom: 16px; font-size: 12px; }
+      #menu .ctrl-row .key { min-width: 44px; font-size: 11px; padding: 1px 6px; margin-right: 8px; }
+
+      /* Three action buttons in a single row are too wide — stack them and
+         right-size the touch target. */
+      #menu .menu-actions {
+        flex-direction: column;
+        gap: 8px;
+      }
+      #menu button {
+        width: 100%;
+        padding: 14px 16px;
+        font-size: 14px;
+        letter-spacing: 0.5px;
+        box-sizing: border-box;
+        touch-action: manipulation;
+      }
+    }
+
     /* ---- FLY BOX ---- */
     #flybox {
       position: fixed; inset: 0;
@@ -1138,8 +1187,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=7"></script>
-  <script src="sprites.js?v=7"></script>
-  <script src="sketch.js?v=7"></script>
+  <script src="multiplayer.js?v=8"></script>
+  <script src="sprites.js?v=8"></script>
+  <script src="sketch.js?v=8"></script>
 </body>
 </html>
