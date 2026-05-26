@@ -360,9 +360,15 @@ MP._handlePos = function (raw) {
   } else {
     g.cs = null;
   }
+  // Appearance (hull / PFD / hat color keys); falls back to defaults on miss
+  if (p.ap) {
+    g.appearance = { hull: p.ap.h, pfd: p.ap.p, hat: p.ap.t };
+  } else if (!g.appearance) {
+    g.appearance = { hull: 'navy', pfd: 'cyan', hat: 'green' };
+  }
 };
 
-MP.broadcastPosition = function ({ x, y, heading, paddlePhase, cast }) {
+MP.broadcastPosition = function ({ x, y, heading, paddlePhase, cast, appearance }) {
   if (!MP._lobbyCh || !MP.currentDerby || MP.currentDerby.status !== 'live') return;
   const now = performance.now();
   if (now - MP._lastSent < 100) return;   // ~10 Hz cap
@@ -374,6 +380,8 @@ MP.broadcastPosition = function ({ x, y, heading, paddlePhase, cast }) {
     fx: Math.round(cast.flyX),
     fy: Math.round(cast.flyY),
   } : null;
+  // Appearance — short keys so 10 Hz traffic stays cheap. h/p/t = hull/pfd/hat
+  const ap = appearance ? { h: appearance.hull, p: appearance.pfd, t: appearance.hat } : null;
   MP._lobbyCh.send({
     type: 'broadcast', event: 'pos',
     payload: {
@@ -383,7 +391,7 @@ MP.broadcastPosition = function ({ x, y, heading, paddlePhase, cast }) {
       y:    Math.round(y),
       h:    Math.round(heading * 1000) / 1000,
       pp:   Math.round((paddlePhase || 0) * 100) / 100,
-      c,
+      c, ap,
     },
   });
 };
@@ -428,6 +436,52 @@ MP._handleChat = function (raw) {
   if (!m || !m.id || m.id === MP.userId) return;
   for (const fn of MP._chatListeners) { try { fn(m); } catch (e) { console.warn(e); } }
 };
+// ---------------------------------------------------------------------------
+// Profiles (Phase 6) — cloud-persistent player state (appearance + progress
+// + stats). Mirror of local playerState + extras; client treats cloud as the
+// source of truth once signed in.
+// ---------------------------------------------------------------------------
+
+MP.profile = null;             // last fetched row from public.profiles
+MP._profileSaveTimer = null;
+
+MP.loadProfile = async function () {
+  await MP.whenReady();
+  const { data, error } = await MP.client.from('profiles')
+    .select('*').eq('player_id', MP.userId).maybeSingle();
+  if (error) { console.warn('[MP] loadProfile failed:', error.message); return null; }
+  if (data) { MP.profile = data; return data; }
+  // First-time sign-in on this account — create a default row.
+  const seed = {
+    player_id:    MP.userId,
+    display_name: MP.getPlayerName(),
+    hull_color:   'navy',
+    pfd_color:    'orange',
+    hat_color:    'green',
+  };
+  const ins = await MP.client.from('profiles').insert(seed).select().single();
+  if (ins.error) { console.warn('[MP] createProfile failed:', ins.error.message); return null; }
+  MP.profile = ins.data;
+  return ins.data;
+};
+
+// Save patch fields. Debounced so a burst of saveProgress calls turns into
+// one network round-trip instead of many.
+MP.saveProfile = function (patch) {
+  if (!MP.userId) return;
+  // Merge into our cached copy so the in-memory state stays consistent
+  if (MP.profile) Object.assign(MP.profile, patch);
+  clearTimeout(MP._profileSaveTimer);
+  MP._profileSaveTimer = setTimeout(async () => {
+    try {
+      const row = { ...patch, updated_at: new Date().toISOString() };
+      const { error } = await MP.client.from('profiles')
+        .update(row).eq('player_id', MP.userId);
+      if (error) console.warn('[MP] saveProfile failed:', error.message);
+    } catch (e) { console.warn('[MP] saveProfile threw:', e); }
+  }, 1200);
+};
+
 MP.sendChat = function (text) {
   if (!MP._lobbyCh || !MP.currentDerby) return;
   text = String(text || '').slice(0, 40);

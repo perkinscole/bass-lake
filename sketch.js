@@ -15,6 +15,50 @@ let ducks = [];                       // surface birds, drift around the lake
 let eagle = null;                     // active bald eagle, null when none
 let eagleSpawnCooldown = 1200;        // frames until next eagle attempt
 let worldSeed = null;                 // seed the whole world was generated from
+
+// ---------------------------------------------------------------------------
+// Kayak color palettes (Phase 6 — customizable angler)
+// Each palette gives the kayak draw() everything it needs: base, lighter
+// highlight, darker lip, and an accent stripe. Add new presets here and
+// they'll automatically show up in the profile color picker.
+// ---------------------------------------------------------------------------
+const HULL_PALETTES = {
+  navy:     { base: [60, 70, 100],   light: [95, 110, 145], dark: [40, 50, 75],  accent: [220, 110, 60] },
+  burgundy: { base: [115, 40, 55],   light: [160, 80, 95],  dark: [80, 25, 35],  accent: [230, 200, 140] },
+  forest:   { base: [40, 80, 55],    light: [75, 120, 90],  dark: [25, 55, 38],  accent: [240, 200, 100] },
+  sunset:   { base: [195, 105, 60],  light: [230, 150, 95], dark: [150, 75, 40], accent: [70, 90, 130] },
+  slate:    { base: [80, 85, 95],    light: [125, 130, 140],dark: [55, 60, 70],  accent: [220, 110, 60] },
+};
+const PFD_PALETTES = {
+  orange:   { base: [200, 80, 50],   dark: [170, 60, 40]  },
+  cyan:     { base: [70, 180, 220],  dark: [40, 140, 180] },
+  red:      { base: [200, 50, 40],   dark: [160, 30, 25]  },
+  yellow:   { base: [230, 190, 60],  dark: [180, 140, 40] },
+  lime:     { base: [150, 210, 80],  dark: [110, 160, 55] },
+};
+const HAT_PALETTES = {
+  green:    [60, 110, 70],
+  black:    [25, 25, 30],
+  tan:      [180, 150, 100],
+  red:      [200, 50, 40],
+  yellow:   [220, 190, 80],
+};
+
+// Current player's chosen appearance — synced with cloud profile + applied
+// to the Kayak instance on world build.
+let playerAppearance = { hull: 'navy', pfd: 'orange', hat: 'green' };
+
+// Lifetime stats — incremented on catches and derby end, mirrored to cloud
+// via MP.saveProfile.
+let playerStats = {
+  catches_by_species: {},
+  biggest_catch:      {},
+  derbies_played:     0,
+  derbies_won:        0,
+  total_points:       0,
+  derby_catches:      0,
+  derby_money_earned: 0,
+};
 let player;        // the kayak the user controls
 let cast = null;   // active fly cast (null when not cast)
 let MAX_CAST_RANGE = 220;       // current cast range (depends on rod tier)
@@ -187,6 +231,21 @@ function refreshUnlocks() {
 
 function saveProgress() {
   try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(playerState)); } catch {}
+  // Cloud mirror: every saveProgress also patches the player's profile row
+  // so progress follows them to any device they sign in on next.
+  if (window.MP && MP.saveProfile && MP.userId) {
+    MP.saveProfile({
+      money:           playerState.money,
+      level_current:   playerState.level,
+      levels_unlocked: playerState.levelsUnlocked,
+      unlocks:         playerState.unlocks,
+      stats:           playerStats,
+      display_name:    MP.getPlayerName(),
+      hull_color:      playerAppearance.hull,
+      pfd_color:       playerAppearance.pfd,
+      hat_color:       playerAppearance.hat,
+    });
+  }
 }
 function loadProgress() {
   try {
@@ -205,6 +264,38 @@ function loadProgress() {
     }
     currentLevel = playerState.level || 'bassLake';
   } catch {}
+}
+
+// Merge a freshly-fetched cloud profile into the local playerState +
+// appearance + stats. Called once after MP signs in so a player on a fresh
+// browser picks up where they left off on another device.
+function applyCloudProfile(p) {
+  if (!p) return;
+  if (p.display_name)   MP.setPlayerName(p.display_name);
+  if (p.money != null)  playerState.money = p.money;
+  if (p.level_current && LEVELS[p.level_current]) {
+    playerState.level = p.level_current;
+    currentLevel = p.level_current;
+  }
+  if (p.levels_unlocked) Object.assign(playerState.levelsUnlocked, p.levels_unlocked);
+  if (p.unlocks) {
+    if (p.unlocks.flies)             Object.assign(playerState.unlocks.flies, p.unlocks.flies);
+    if (p.unlocks.rod   != null)     playerState.unlocks.rod   = p.unlocks.rod;
+    if (p.unlocks.kayak != null)     playerState.unlocks.kayak = p.unlocks.kayak;
+    if (p.unlocks.sonar != null)     playerState.unlocks.sonar = p.unlocks.sonar;
+  }
+  if (p.stats && typeof p.stats === 'object') {
+    Object.assign(playerStats, p.stats);
+  }
+  if (p.hull_color && HULL_PALETTES[p.hull_color]) playerAppearance.hull = p.hull_color;
+  if (p.pfd_color  && PFD_PALETTES [p.pfd_color])  playerAppearance.pfd  = p.pfd_color;
+  if (p.hat_color  && HAT_PALETTES [p.hat_color])  playerAppearance.hat  = p.hat_color;
+  // Cache merged state to localStorage for fast boot next time
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(playerState)); } catch {}
+  refreshUnlocks();
+  // Repaint everything that depends on unlocks / level
+  if (typeof populateLevelGroup === 'function') populateLevelGroup();
+  if (typeof populateMenuFlyGrid === 'function') populateMenuFlyGrid();
 }
 
 // Pre-baked static world image — drawn once at setup, then sub-region blitted
@@ -512,6 +603,14 @@ function buildWorld(seed) {
 // One-time wiring (UI, sounds, event listeners). Runs once per page load and
 // must NOT be repeated when buildWorld() rebuilds the lake.
 function finishSetup() {
+  // Pull the cloud profile after MP signs in — applies appearance,
+  // unlocks, stats, money, level, etc. so cross-device progress works.
+  if (window.MP && MP.whenReady) {
+    MP.whenReady()
+      .then(() => MP.loadProfile())
+      .then(p => applyCloudProfile(p))
+      .catch(e => console.warn('[profile] cloud load failed:', e.message || e));
+  }
   buildSpeciesPortraits();
   buildFlyIcons();
   populateLevelGroup();
@@ -531,6 +630,7 @@ function finishSetup() {
     document.getElementById('shop').classList.remove('hidden');
   });
   wireDerbyUI();
+  wireProfileUI();
   let shopClose = document.getElementById('shop-close');
   if (shopClose) shopClose.addEventListener('click', () => {
     document.getElementById('shop').classList.add('hidden');
@@ -1340,12 +1440,13 @@ function draw() {
   // Chat bubbles ride above ghost names; drawn for local + remote players.
   drawChatBubbles();
 
-  // Broadcast our own position + active cast to peers (~10 Hz cap inside MP)
+  // Broadcast our own position + active cast + appearance to peers
   if (window.MP && MP.broadcastPosition) {
     MP.broadcastPosition({
       x: player.pos.x, y: player.pos.y,
       heading: player.heading, paddlePhase: player.paddlePhase,
       cast,    // null when not casting; FlyCast instance during a cast
+      appearance: playerAppearance,
     });
   }
 
@@ -2864,16 +2965,20 @@ class Kayak {
     fill(0, 0, 0, 90);
     ellipse(2, 4, s * 2.7, s * 0.95);
 
-    // Hull — long elongated shape, painted bright accent color so it's spottable
-    fill(60, 70, 100);
+    // Hull — long elongated shape. Colors pull from the player's chosen
+    // palette so each angler reads as their own kayak in a derby.
+    const hp  = HULL_PALETTES[playerAppearance.hull] || HULL_PALETTES.navy;
+    const pp  = PFD_PALETTES [playerAppearance.pfd]  || PFD_PALETTES.orange;
+    const hat = HAT_PALETTES [playerAppearance.hat]  || HAT_PALETTES.green;
+    fill(...hp.base);
     ellipse(0, 0, s * 2.5, s * 0.8);
     // accent stripe along upper edge (visible from above)
-    fill(220, 110, 60);
+    fill(...hp.accent);
     ellipse(0, -s * 0.18, s * 2.3, s * 0.16);
     // hull lip / rim
-    fill(40, 50, 75);
+    fill(...hp.dark);
     ellipse(0, 0, s * 2.5, s * 0.8);
-    fill(95, 110, 145);
+    fill(...hp.light);
     ellipse(0, -s * 0.02, s * 2.2, s * 0.55);
 
     // cockpit opening (where the paddler sits) — dark oval
@@ -2881,22 +2986,22 @@ class Kayak {
     ellipse(s * 0.05, 0, s * 0.85, s * 0.42);
 
     // paddler torso + life jacket
-    fill(200, 80, 50);                   // bright orange PFD
+    fill(...pp.base);
     ellipse(s * 0.05, 0, s * 0.55, s * 0.4);
-    fill(170, 60, 40);                   // shadow side
+    fill(...pp.dark);                    // shadow side
     arc(s * 0.05, 0, s * 0.55, s * 0.4, -PI / 2, PI / 2);
 
     // arms — thin segments holding the paddle shaft
     let armReach = s * 0.18;
     let armSpread = sin(this.paddlePhase) * s * 0.12;
-    fill(190, 75, 45);
+    fill(pp.dark[0] - 10, pp.dark[1] - 10, pp.dark[2] - 10);
     ellipse(s * 0.10,  armReach + armSpread * 0.3, s * 0.15, s * 0.12);
     ellipse(s * 0.10, -armReach - armSpread * 0.3, s * 0.15, s * 0.12);
 
-    // head (tan skin tone) + cap
+    // head (tan skin tone) + cap (chosen hat color)
     fill(225, 195, 155);
     ellipse(s * 0.05, 0, s * 0.28, s * 0.28);
-    fill(60, 110, 70);                  // green cap
+    fill(...hat);
     arc(s * 0.05, 0, s * 0.30, s * 0.30, PI, TWO_PI);
 
     // PADDLE — alternates sides each stroke. Visible blade dipped in water on
@@ -3780,15 +3885,24 @@ class FlyCast {
       let weight  = this.hookedFish.size || 1;
       catchCount[species] = (catchCount[species] || 0) + 1;
       let reward = (lvl().rewards && lvl().rewards[species]) || REWARDS[species] || 0;
+      // Stats: every catch, anywhere, counts toward lifetime totals.
+      playerStats.catches_by_species ||= {};
+      playerStats.catches_by_species[species] = (playerStats.catches_by_species[species] || 0) + 1;
+      playerStats.biggest_catch ||= {};
+      if (!playerStats.biggest_catch[species] || weight > playerStats.biggest_catch[species]) {
+        playerStats.biggest_catch[species] = Math.round(weight * 10) / 10;
+      }
       // In a live derby, points go to the cloud leaderboard instead of cash.
       // Single-player keeps the dollar reward; derby money is paid out at the
       // end based on placement (see showDerbyResults()).
       if (derbyLive && window.MP && MP.currentDerby && MP.currentDerby.status === 'live') {
         MP.recordCatch({ species, weight: Math.round(weight * 10) / 10, points: reward });
+        playerStats.derby_catches = (playerStats.derby_catches || 0) + 1;
+        playerStats.total_points  = (playerStats.total_points  || 0) + reward;
       } else {
         playerState.money += reward;
-        saveProgress();
       }
+      saveProgress();
       lastCatchToast = { species, time: frameCount, money: derbyLive ? 0 : reward, points: derbyLive ? reward : 0 };
       playSound('catch');
       stopLoop('reel_loop');
@@ -4422,7 +4536,7 @@ function drawDerbyGhosts() {
     const x  = lerp(g.prevX, g.x, t);
     const y  = lerp(g.prevY, g.y, t);
     const h  = lerpAngle(g.prevH, g.h, t);
-    drawGhostKayak(x, y, h, g.pp, g.name);
+    drawGhostKayak(x, y, h, g.pp, g.name, g.appearance);
     // Cast line + fly — only drawn when this ghost is actively casting.
     if (g.cs) {
       const fx = lerp(g.prevCx, g.cx, t);
@@ -4503,9 +4617,14 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 
-// Simplified kayak silhouette — translucent so the local player still pops,
-// distinguished by a cyan PFD vs the player's orange one.
-function drawGhostKayak(x, y, heading, paddlePhase, name) {
+// Translucent kayak silhouette using the ghost's chosen color palette so
+// each peer reads as a distinct angler.
+function drawGhostKayak(x, y, heading, paddlePhase, name, appearance) {
+  const ap = appearance || { hull: 'navy', pfd: 'cyan', hat: 'green' };
+  const hp  = HULL_PALETTES[ap.hull] || HULL_PALETTES.navy;
+  const pp  = PFD_PALETTES [ap.pfd]  || PFD_PALETTES.cyan;
+  const hat = HAT_PALETTES [ap.hat]  || HAT_PALETTES.green;
+
   push();
   translate(x, y);
   rotate(heading);
@@ -4514,20 +4633,22 @@ function drawGhostKayak(x, y, heading, paddlePhase, name) {
   // hull shadow
   fill(0, 0, 0, 70);
   ellipse(2, 4, s * 2.7, s * 0.95);
-  // hull
-  fill(45, 55, 80, 210);
+  // hull (translucent so they read as "remote")
+  fill(hp.dark[0], hp.dark[1], hp.dark[2], 210);
   ellipse(0, 0, s * 2.5, s * 0.8);
-  fill(85, 100, 130, 210);
+  fill(hp.light[0], hp.light[1], hp.light[2], 210);
   ellipse(0, -s * 0.02, s * 2.2, s * 0.55);
   // cockpit
   fill(15, 20, 28, 210);
   ellipse(s * 0.05, 0, s * 0.85, s * 0.42);
-  // PFD — cyan to read as "someone else"
-  fill(70, 180, 220, 230);
+  // PFD
+  fill(pp.base[0], pp.base[1], pp.base[2], 230);
   ellipse(s * 0.05, 0, s * 0.55, s * 0.4);
-  // head
+  // head + cap
   fill(225, 195, 155, 230);
   ellipse(s * 0.05, 0, s * 0.28, s * 0.28);
+  fill(hat[0], hat[1], hat[2], 230);
+  arc(s * 0.05, 0, s * 0.30, s * 0.30, PI, TWO_PI);
   // tiny paddle motion — animate from received paddlePhase
   stroke(50, 35, 22, 200);
   strokeWeight(2);
@@ -4658,9 +4779,17 @@ function showDerbyResults() {
   }
 
   // Pay out once, then save progress.
-  if (prize > 0 && !showDerbyResults._paidFor.has(d.id)) {
+  if (!showDerbyResults._paidFor.has(d.id)) {
     showDerbyResults._paidFor.add(d.id);
-    playerState.money += prize;
+    // Lifetime stats
+    playerStats.derbies_played = (playerStats.derbies_played || 0) + 1;
+    if (myRank === 0 && sorted.length >= 2) {
+      playerStats.derbies_won = (playerStats.derbies_won || 0) + 1;
+    }
+    if (prize > 0) {
+      playerState.money += prize;
+      playerStats.derby_money_earned = (playerStats.derby_money_earned || 0) + prize;
+    }
     saveProgress();
   }
 
@@ -4818,6 +4947,181 @@ function drawChatBubbles() {
     }
     drawChatBubble(x, y, b.text);
   }
+}
+
+// ============================================================================
+// Profile modal (Phase 6) — name, appearance, stats, inventory
+// ============================================================================
+
+function wireProfileUI() {
+  const modal = document.getElementById('profile');
+  if (!modal) return;
+  const openBtn  = document.getElementById('profile-button');
+  const closeBtn = document.getElementById('profile-close-x');
+  const nameIn   = document.getElementById('profile-name');
+
+  openBtn?.addEventListener('click', () => {
+    refreshProfileView();
+    modal.classList.remove('hidden');
+  });
+  closeBtn?.addEventListener('click', () => modal.classList.add('hidden'));
+  // Click outside the card to dismiss
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  // Name field — write-through to cloud profile via saveProgress
+  nameIn?.addEventListener('change', () => {
+    const n = (nameIn.value || '').trim().slice(0, 24);
+    if (!n) return;
+    MP?.setPlayerName?.(n);
+    saveProgress();
+    refreshProfileView();
+  });
+
+  buildSwatches('picker-hull', Object.keys(HULL_PALETTES),
+    (key) => HULL_PALETTES[key].base,
+    (key) => { playerAppearance.hull = key; onAppearanceChange(); });
+  buildSwatches('picker-pfd',  Object.keys(PFD_PALETTES),
+    (key) => PFD_PALETTES[key].base,
+    (key) => { playerAppearance.pfd = key; onAppearanceChange(); });
+  buildSwatches('picker-hat',  Object.keys(HAT_PALETTES),
+    (key) => HAT_PALETTES[key],
+    (key) => { playerAppearance.hat = key; onAppearanceChange(); });
+}
+
+function onAppearanceChange() {
+  saveProgress();
+  refreshProfileView();
+}
+
+function buildSwatches(rowId, keys, colorFn, onClick) {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+  row.innerHTML = keys.map(k => {
+    const c = colorFn(k);
+    const css = `rgb(${c[0]},${c[1]},${c[2]})`;
+    return `<button class="swatch" data-key="${k}" style="background:${css}" title="${k}"></button>`;
+  }).join('');
+  row.querySelectorAll('.swatch').forEach(btn => {
+    btn.addEventListener('click', () => onClick(btn.dataset.key));
+  });
+}
+
+function refreshProfileView() {
+  const modal = document.getElementById('profile');
+  if (!modal || modal.classList.contains('hidden')) {
+    // still update name input if open
+  }
+  const nameIn = document.getElementById('profile-name');
+  if (nameIn && document.activeElement !== nameIn) nameIn.value = MP?.getPlayerName?.() || '';
+
+  // Highlight active swatches
+  for (const [rowId, key] of [
+    ['picker-hull', playerAppearance.hull],
+    ['picker-pfd',  playerAppearance.pfd],
+    ['picker-hat',  playerAppearance.hat],
+  ]) {
+    document.querySelectorAll(`#${rowId} .swatch`).forEach(b => {
+      b.classList.toggle('active', b.dataset.key === key);
+    });
+  }
+
+  // Live kayak preview
+  drawProfilePreview();
+
+  // Stats panel
+  const statsEl = document.getElementById('profile-stats');
+  if (statsEl) {
+    const biggest = playerStats.biggest_catch || {};
+    const totalCatches = Object.values(playerStats.catches_by_species || {})
+      .reduce((s, n) => s + n, 0);
+    const bestEntry = Object.entries(biggest)
+      .sort((a, b) => b[1] - a[1])[0];
+    const rows = [
+      ['Money',           `$${playerState.money}`],
+      ['Total catches',   String(totalCatches)],
+      ['Derbies played',  String(playerStats.derbies_played || 0)],
+      ['Derbies won',     String(playerStats.derbies_won    || 0)],
+      ['Derby catches',   String(playerStats.derby_catches  || 0)],
+      ['Derby points',    String(playerStats.total_points   || 0)],
+      ['Biggest fish',    bestEntry ? `${bestEntry[1]}″ ${prettySpeciesName(bestEntry[0])}` : '—'],
+      ['Levels unlocked', String(Object.values(playerState.levelsUnlocked || {}).filter(Boolean).length)],
+    ];
+    statsEl.innerHTML = rows.map(([lbl, val]) =>
+      `<div class="stat-row"><span class="lbl">${lbl}</span><span class="val">${escapeHtmlGlobal(val)}</span></div>`
+    ).join('');
+  }
+
+  // Inventory chips (owned vs locked)
+  const invEl = document.getElementById('profile-inventory');
+  if (invEl) {
+    const chips = [];
+    chips.push({ owned: true,  label: 'Dry Fly' });
+    chips.push({ owned: !!playerState.unlocks.flies.nymph,       label: 'Nymph' });
+    chips.push({ owned: !!playerState.unlocks.flies.woolyBugger, label: 'Wooly Bugger' });
+    chips.push({ owned: (playerState.unlocks.rod   || 1) >= 2, label: 'Mid Rod' });
+    chips.push({ owned: (playerState.unlocks.rod   || 1) >= 3, label: 'Pro Rod' });
+    chips.push({ owned: (playerState.unlocks.kayak || 1) >= 2, label: 'Fast Kayak' });
+    chips.push({ owned: (playerState.unlocks.kayak || 1) >= 3, label: 'Sea Kayak' });
+    chips.push({ owned: !!playerState.unlocks.sonar, label: 'Sonar' });
+    Object.entries(playerState.levelsUnlocked || {}).forEach(([id, v]) => {
+      if (v && LEVELS[id]) chips.push({ owned: true, label: LEVELS[id].name || id });
+    });
+    invEl.innerHTML = chips.map(c =>
+      `<span class="inv-chip${c.owned ? '' : ' locked'}">${escapeHtmlGlobal(c.label)}</span>`
+    ).join('');
+  }
+}
+
+// Tiny offscreen-canvas render of a kayak with the chosen colors so the
+// preview in the profile modal reflects changes instantly.
+function drawProfilePreview() {
+  const canvas = document.getElementById('profile-preview');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const hp  = HULL_PALETTES[playerAppearance.hull] || HULL_PALETTES.navy;
+  const pp  = PFD_PALETTES [playerAppearance.pfd]  || PFD_PALETTES.orange;
+  const hat = HAT_PALETTES [playerAppearance.hat]  || HAT_PALETTES.green;
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const s  = 38;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  // Hull shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath(); ctx.ellipse(2, 6, s * 1.35, s * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+  // Hull
+  ctx.fillStyle = `rgb(${hp.base.join(',')})`;
+  ctx.beginPath(); ctx.ellipse(0, 0, s * 1.25, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  // Accent
+  ctx.fillStyle = `rgb(${hp.accent.join(',')})`;
+  ctx.beginPath(); ctx.ellipse(0, -s * 0.18, s * 1.15, s * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+  // Lip
+  ctx.fillStyle = `rgb(${hp.dark.join(',')})`;
+  ctx.beginPath(); ctx.ellipse(0, 0, s * 1.25, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgb(${hp.light.join(',')})`;
+  ctx.beginPath(); ctx.ellipse(0, -s * 0.02, s * 1.1, s * 0.27, 0, 0, Math.PI * 2); ctx.fill();
+  // Cockpit
+  ctx.fillStyle = 'rgb(15, 20, 28)';
+  ctx.beginPath(); ctx.ellipse(s * 0.05, 0, s * 0.42, s * 0.21, 0, 0, Math.PI * 2); ctx.fill();
+  // PFD
+  ctx.fillStyle = `rgb(${pp.base.join(',')})`;
+  ctx.beginPath(); ctx.ellipse(s * 0.05, 0, s * 0.27, s * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgb(${pp.dark.join(',')})`;
+  ctx.beginPath(); ctx.arc(s * 0.05, 0, s * 0.20, -Math.PI / 2, Math.PI / 2); ctx.fill();
+  // Head + hat
+  ctx.fillStyle = 'rgb(225, 195, 155)';
+  ctx.beginPath(); ctx.ellipse(s * 0.05, 0, s * 0.14, s * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgb(${hat.join(',')})`;
+  ctx.beginPath(); ctx.arc(s * 0.05, 0, s * 0.15, Math.PI, Math.PI * 2); ctx.fill();
+  // Paddle hint
+  ctx.strokeStyle = 'rgba(50, 35, 22, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(s * 0.05, -s * 0.6); ctx.lineTo(s * 0.05, s * 0.6); ctx.stroke();
+  ctx.restore();
 }
 
 function drawChatBubble(cx, cy, text) {

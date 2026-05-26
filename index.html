@@ -104,6 +104,7 @@
       </div>
 
       <div class="menu-actions">
+        <button id="profile-button" class="secondary">Profile</button>
         <button id="shop-button" class="secondary">Tackle Shop</button>
         <button id="derby-button" class="secondary">Multiplayer</button>
         <button id="start-button">Cast Off</button>
@@ -146,6 +147,46 @@
       <div class="results-board" id="results-board"></div>
       <div class="results-reward" id="results-reward"></div>
       <button id="results-close">Back to Menu</button>
+    </div>
+  </div>
+
+  <!-- Profile modal — name, appearance, stats, inventory -->
+  <div id="profile" class="hidden">
+    <div class="profile-card">
+      <div class="profile-header">
+        <div class="profile-title">Angler Profile</div>
+        <button id="profile-close-x" class="x" aria-label="close">×</button>
+      </div>
+
+      <div class="profile-row">
+        <label>Name</label>
+        <input id="profile-name" maxlength="24" />
+      </div>
+
+      <div class="profile-section-title">Kayak</div>
+      <div class="profile-preview-row">
+        <canvas id="profile-preview" width="200" height="120"></canvas>
+        <div class="profile-pickers">
+          <div class="picker-group">
+            <div class="picker-label">Hull</div>
+            <div class="swatch-row" id="picker-hull"></div>
+          </div>
+          <div class="picker-group">
+            <div class="picker-label">PFD</div>
+            <div class="swatch-row" id="picker-pfd"></div>
+          </div>
+          <div class="picker-group">
+            <div class="picker-label">Hat</div>
+            <div class="swatch-row" id="picker-hat"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section-title">Stats</div>
+      <div class="profile-stats" id="profile-stats"></div>
+
+      <div class="profile-section-title">Inventory</div>
+      <div class="profile-inventory" id="profile-inventory"></div>
     </div>
   </div>
 
@@ -714,6 +755,124 @@
       font: 600 13px -apple-system, system-ui, sans-serif;
       letter-spacing: 1px;
       cursor: pointer;
+    }
+
+    /* ---- PROFILE MODAL ---- */
+    #profile {
+      position: fixed; inset: 0; background: rgba(10, 22, 18, 0.84);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 115;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    #profile.hidden { display: none; }
+    #profile .profile-card {
+      background: linear-gradient(135deg, rgba(22, 38, 32, 0.98), rgba(12, 24, 20, 0.98));
+      border: 2px solid rgba(255, 220, 130, 0.5);
+      border-radius: 12px;
+      padding: 22px 26px 22px;
+      width: 500px; max-width: 94vw; max-height: 90vh;
+      overflow-y: auto;
+      color: rgba(220, 230, 240, 0.92);
+      font: 14px/1.4 -apple-system, system-ui, sans-serif;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    #profile .profile-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 220, 130, 0.25);
+    }
+    #profile .profile-title {
+      font: 700 22px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.95); letter-spacing: 1px;
+    }
+    #profile .x { background: none; border: none; color: rgba(220, 230, 240, 0.7);
+      font-size: 24px; cursor: pointer; line-height: 1; padding: 0 4px; }
+    #profile .x:hover { color: rgba(255, 220, 130, 0.95); }
+    #profile .profile-section-title {
+      color: rgba(255, 220, 130, 0.75);
+      font: 700 11px/1 -apple-system, system-ui, sans-serif;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      margin: 16px 0 8px;
+    }
+    #profile .profile-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    #profile .profile-row label { width: 70px; color: rgba(220, 230, 240, 0.7); font-size: 13px; }
+    #profile input {
+      flex: 1; background: rgba(0,0,0,0.35); color: rgba(220, 240, 220, 0.95);
+      border: 1px solid rgba(255, 220, 130, 0.25); border-radius: 6px;
+      padding: 8px 10px; font: 14px -apple-system, system-ui, sans-serif;
+    }
+    #profile .profile-preview-row {
+      display: grid; grid-template-columns: 200px 1fr; gap: 14px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    #profile #profile-preview {
+      width: 200px; height: 120px;
+      background: radial-gradient(ellipse at center,
+        rgba(80, 130, 110, 0.7), rgba(35, 70, 55, 0.7));
+      border-radius: 8px;
+    }
+    #profile .picker-group { margin-bottom: 6px; }
+    #profile .picker-label {
+      font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+      color: rgba(220, 230, 240, 0.7); margin-bottom: 4px;
+    }
+    #profile .swatch-row { display: flex; gap: 5px; flex-wrap: wrap; }
+    #profile .swatch {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      cursor: pointer; padding: 0;
+      transition: transform 0.08s ease-out, border-color 0.12s ease-out;
+      touch-action: manipulation;
+    }
+    #profile .swatch:hover { transform: translateY(-1px); }
+    #profile .swatch.active { border-color: rgba(255, 220, 130, 0.95); transform: scale(1.05); }
+    #profile .profile-stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px; padding: 10px 14px;
+    }
+    #profile .stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; }
+    #profile .stat-row .lbl { color: rgba(180, 200, 210, 0.75); font-size: 12px; }
+    #profile .stat-row .val { color: rgba(255, 230, 150, 0.95); font: 700 13px 'SF Mono', Menlo, monospace; }
+    #profile .profile-inventory {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 10px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px;
+    }
+    #profile .inv-chip {
+      background: rgba(255, 220, 130, 0.12);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 6px;
+      padding: 4px 9px;
+      font: 600 11px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px;
+    }
+    #profile .inv-chip.locked {
+      opacity: 0.4;
+      background: rgba(0,0,0,0.25);
+      border-color: rgba(255, 220, 130, 0.15);
+    }
+
+    /* Mobile tweaks */
+    @media (pointer: coarse), (max-width: 720px) {
+      #profile .profile-card { padding: 16px; }
+      #profile input { font-size: 16px; }
+      #profile .profile-preview-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      #profile #profile-preview { width: 100%; height: 130px; }
+      #profile .swatch { width: 34px; height: 34px; }
+      #profile .profile-stats { grid-template-columns: 1fr; }
+      #profile .profile-header { /* slimmer */ }
+      #profile .profile-title { font-size: 19px; }
     }
 
     /* ---- DERBY EVENT FEED (catches by everyone) ---- */
@@ -1339,8 +1498,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=12"></script>
-  <script src="sprites.js?v=12"></script>
-  <script src="sketch.js?v=12"></script>
+  <script src="multiplayer.js?v=13"></script>
+  <script src="sprites.js?v=13"></script>
+  <script src="sketch.js?v=13"></script>
 </body>
 </html>
