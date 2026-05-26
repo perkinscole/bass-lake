@@ -610,6 +610,27 @@ function finishSetup() {
       .then(() => MP.loadProfile())
       .then(p => applyCloudProfile(p))
       .catch(e => console.warn('[profile] cloud load failed:', e.message || e));
+
+    // If the player signs in / signs out / converts anonymous->permanent
+    // via the Account section, reload the cloud profile so progress and
+    // appearance reflect the new identity.
+    MP.onAuthChange(async ({ userChanged }) => {
+      if (!userChanged) {
+        // Same user, just a state refresh (e.g. anonymous -> email linked).
+        // Re-render the Account section if the modal is open.
+        if (!document.getElementById('profile')?.classList.contains('hidden')) {
+          refreshProfileView();
+        }
+        return;
+      }
+      try {
+        const p = await MP.loadProfile();
+        applyCloudProfile(p);
+      } catch (e) { console.warn('[profile] reload after auth change failed:', e.message || e); }
+      if (!document.getElementById('profile')?.classList.contains('hidden')) {
+        refreshProfileView();
+      }
+    });
   }
   buildSpeciesPortraits();
   buildFlyIcons();
@@ -5028,6 +5049,9 @@ function refreshProfileView() {
   // Live kayak preview
   drawProfilePreview();
 
+  // Account section — adapts to anonymous vs signed-in state
+  renderAccountSection();
+
   // Stats panel
   const statsEl = document.getElementById('profile-stats');
   if (statsEl) {
@@ -5070,6 +5094,105 @@ function refreshProfileView() {
       `<span class="inv-chip${c.owned ? '' : ' locked'}">${escapeHtmlGlobal(c.label)}</span>`
     ).join('');
   }
+}
+
+// Renders the Account section of the Profile modal. Two states:
+//   - anonymous: "Save your progress" form (email -> magic link)
+//   - signed in: email shown + Sign In Elsewhere / Sign Out buttons
+function renderAccountSection() {
+  const el = document.getElementById('profile-account');
+  if (!el || !window.MP) return;
+
+  const anon  = MP.isAnonymous();
+  const email = MP.getEmail();
+
+  if (anon) {
+    el.innerHTML = `
+      <div class="acct-blurb">
+        Add your email to save progress across devices. We'll send you a magic
+        link — no password to remember. Your current progress stays attached
+        to this email.
+      </div>
+      <div class="acct-row">
+        <input id="acct-email" type="email" placeholder="you@example.com"
+               autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <button id="acct-save" class="acct-btn">Save Account</button>
+      </div>
+      <div class="acct-blurb" style="margin: 10px 0 6px;">Already have an account on another device?</div>
+      <div class="acct-row">
+        <input id="acct-signin-email" type="email" placeholder="you@example.com"
+               autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <button id="acct-signin" class="acct-btn secondary">Sign In</button>
+      </div>
+      <div class="acct-status" id="acct-status"></div>
+    `;
+    el.querySelector('#acct-save').addEventListener('click',  () => doLinkEmail());
+    el.querySelector('#acct-signin').addEventListener('click', () => doSignInWithEmail());
+  } else {
+    el.innerHTML = `
+      <div class="signed-in">
+        <div>
+          <div class="acct-blurb" style="margin: 0 0 4px;">Signed in as</div>
+          <div class="acct-email">${escapeHtmlGlobal(email || '(no email)')}</div>
+        </div>
+        <button id="acct-signout" class="acct-btn secondary">Sign Out</button>
+      </div>
+      <div class="acct-status" id="acct-status"></div>
+    `;
+    el.querySelector('#acct-signout').addEventListener('click', () => doSignOut());
+  }
+}
+
+async function doLinkEmail() {
+  const input  = document.getElementById('acct-email');
+  const btn    = document.getElementById('acct-save');
+  const status = document.getElementById('acct-status');
+  if (!input || !btn) return;
+  const email = (input.value || '').trim();
+  if (!email) { setAcctStatus(status, 'enter an email first', 'err'); return; }
+  btn.disabled = true; setAcctStatus(status, 'sending link…', '');
+  try {
+    await MP.linkEmail(email);
+    setAcctStatus(status,
+      `Check ${email} for a confirmation link. Click it to save your progress to this account.`,
+      'ok');
+  } catch (e) {
+    setAcctStatus(status, e.message || String(e), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doSignInWithEmail() {
+  const input  = document.getElementById('acct-signin-email');
+  const btn    = document.getElementById('acct-signin');
+  const status = document.getElementById('acct-status');
+  if (!input || !btn) return;
+  const email = (input.value || '').trim();
+  if (!email) { setAcctStatus(status, 'enter an email first', 'err'); return; }
+  if (!confirm('Sign in with ' + email + '?\n\nThis will replace your current local progress with whatever is saved to that account.')) return;
+  btn.disabled = true; setAcctStatus(status, 'sending link…', '');
+  try {
+    await MP.signInWithEmail(email);
+    setAcctStatus(status,
+      `Check ${email} for a sign-in link. Open it on this device to load your saved progress.`,
+      'ok');
+  } catch (e) {
+    setAcctStatus(status, e.message || String(e), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doSignOut() {
+  if (!confirm('Sign out? Your saved progress is safe — sign back in any time to restore it.')) return;
+  try { await MP.signOut(); } catch (e) { console.warn(e); }
+}
+
+function setAcctStatus(el, msg, cls) {
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'acct-status' + (cls ? ' ' + cls : '');
 }
 
 // Tiny offscreen-canvas render of a kayak with the chosen colors so the

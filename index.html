@@ -182,6 +182,9 @@
         </div>
       </div>
 
+      <div class="profile-section-title">Account</div>
+      <div class="profile-account" id="profile-account"></div>
+
       <div class="profile-section-title">Stats</div>
       <div class="profile-stats" id="profile-stats"></div>
 
@@ -829,6 +832,57 @@
     }
     #profile .swatch:hover { transform: translateY(-1px); }
     #profile .swatch.active { border-color: rgba(255, 220, 130, 0.95); transform: scale(1.05); }
+    #profile .profile-account {
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    #profile .profile-account .acct-blurb {
+      color: rgba(180, 200, 210, 0.75);
+      font-size: 12px; line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    #profile .profile-account .acct-row {
+      display: flex; gap: 8px; align-items: center;
+    }
+    #profile .profile-account input {
+      flex: 1; background: rgba(0,0,0,0.35);
+      color: rgba(220, 240, 220, 0.95);
+      border: 1px solid rgba(255, 220, 130, 0.25);
+      border-radius: 6px; padding: 9px 10px;
+      font: 14px -apple-system, system-ui, sans-serif;
+    }
+    #profile .profile-account .acct-btn {
+      background: rgba(255, 220, 130, 0.92);
+      color: rgba(20, 35, 30, 0.95);
+      border: none; border-radius: 6px;
+      padding: 9px 16px;
+      font: 700 12px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px; cursor: pointer;
+      touch-action: manipulation;
+    }
+    #profile .profile-account .acct-btn.secondary {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 220, 130, 0.9);
+    }
+    #profile .profile-account .acct-btn:disabled { opacity: 0.55; cursor: wait; }
+    #profile .profile-account .acct-status {
+      margin-top: 8px; font-size: 12px; min-height: 16px;
+    }
+    #profile .profile-account .acct-status.ok  { color: rgba(190, 230, 130, 0.95); }
+    #profile .profile-account .acct-status.err { color: rgba(255, 140, 120, 0.95); }
+    #profile .profile-account .acct-email {
+      color: rgba(255, 230, 150, 0.95);
+      font: 700 14px 'SF Mono', Menlo, monospace;
+      word-break: break-all;
+    }
+    #profile .profile-account .signed-in {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; flex-wrap: wrap;
+    }
+
     #profile .profile-stats {
       display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
       background: rgba(0,0,0,0.25);
@@ -1498,8 +1552,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=13"></script>
-  <script src="sprites.js?v=13"></script>
-  <script src="sketch.js?v=13"></script>
+  <script src="multiplayer.js?v=14"></script>
+  <script src="sprites.js?v=14"></script>
+  <script src="sketch.js?v=14"></script>
 </body>
 </html>

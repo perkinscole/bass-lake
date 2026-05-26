@@ -47,7 +47,11 @@ MP._settle = function (err) {
     }
 
     MP.client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true },
+      auth: {
+        persistSession:      true,
+        autoRefreshToken:    true,
+        detectSessionInUrl:  true,   // pick up magic-link tokens from the URL
+      },
     });
 
     // Reuse an existing session if the player has one, else sign in anew.
@@ -58,16 +62,89 @@ MP._settle = function (err) {
       ({ data: sessionData } = await MP.client.auth.getSession());
     }
 
-    MP.userId = sessionData.session?.user?.id || null;
+    MP.user   = sessionData.session?.user || null;
+    MP.userId = MP.user?.id || null;
     if (!MP.userId) throw new Error('signed in but got no user id');
 
+    // Keep MP.user current as the session updates (magic-link landing,
+    // email confirm, sign-out).
+    MP.client.auth.onAuthStateChange((evt, session) => {
+      const prev = MP.userId;
+      MP.user   = session?.user || null;
+      MP.userId = MP.user?.id || null;
+      // If the user changes (e.g. magic-link sign-in from a different account
+      // overrides the anonymous session) tell listeners so the UI repaints.
+      for (const fn of MP._authListeners) {
+        try { fn({ event: evt, user: MP.user, userChanged: prev !== MP.userId }); } catch {}
+      }
+    });
+
     MP._settle(null);
-    console.log('[MP] connected — anonymous id', MP.userId);
+    console.log('[MP] connected —', MP.user?.is_anonymous ? 'anonymous' : 'permanent', 'id', MP.userId);
   } catch (err) {
     console.warn('[MP] connection failed — staying single-player only:', err.message || err);
     MP._settle(err);
   }
 })();
+
+// ---------------------------------------------------------------------------
+// Account methods — save anonymous progress to an email, sign in from
+// another device, sign out.
+// ---------------------------------------------------------------------------
+
+MP._authListeners = [];
+MP.onAuthChange = function (fn) {
+  MP._authListeners.push(fn);
+  return () => { MP._authListeners = MP._authListeners.filter(f => f !== fn); };
+};
+
+// True while the player has no email attached. Profile.user.is_anonymous is
+// the source of truth (Supabase sets it on the JWT).
+MP.isAnonymous = function () {
+  return !!MP.user?.is_anonymous;
+};
+MP.getEmail = function () {
+  return MP.user?.email || null;
+};
+
+// Convert the current anonymous account into a permanent one by attaching
+// an email. The user clicks the confirm link in their inbox; their UID
+// (and therefore their profile + progress) stays the same.
+MP.linkEmail = async function (email) {
+  email = (email || '').trim();
+  if (!email) throw new Error('email required');
+  if (!MP.isAnonymous()) throw new Error('this account already has an email — sign out first to change it');
+  const { error } = await MP.client.auth.updateUser({ email });
+  if (error) throw error;
+  return { ok: true };
+};
+
+// Sign in from another device. Sends a magic link to the email. Clicking
+// it routes the user back here with a permanent session attached to that
+// email's existing profile. Will NOT auto-create a new account — players
+// must use linkEmail() first to register.
+MP.signInWithEmail = async function (email) {
+  email = (email || '').trim();
+  if (!email) throw new Error('email required');
+  const { error } = await MP.client.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: false,
+      emailRedirectTo:  location.origin + location.pathname,
+    },
+  });
+  if (error) throw error;
+  return { ok: true };
+};
+
+MP.signOut = async function () {
+  await MP.client.auth.signOut();
+  // Sign back in anonymously so the game keeps working — they'll get a
+  // fresh blank profile until they sign in with email again.
+  await MP.client.auth.signInAnonymously();
+  // Reload so cached profile/world get rebuilt for the new identity.
+  location.reload();
+};
 
 // ---------------------------------------------------------------------------
 // Player identity (persisted across sessions — anonymous UID never changes)
