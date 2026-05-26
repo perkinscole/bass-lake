@@ -281,7 +281,14 @@ MP._subscribeLobby = async function (derbyId) {
       MP._applyDerbyRow(payload.new);
     }
   );
-  ch.on('broadcast', { event: 'pos' }, MP._handlePos);
+  // Catches feed — every player's landed fish broadcasts to everyone via the
+  // catches table INSERT. We enrich with the player's name from the roster.
+  ch.on('postgres_changes',
+    { event: 'INSERT', schema: 'public', table: 'catches', filter: 'derby_id=eq.' + derbyId },
+    (payload) => MP._emitCatch(payload.new)
+  );
+  ch.on('broadcast', { event: 'pos' },  MP._handlePos);
+  ch.on('broadcast', { event: 'chat' }, MP._handleChat);
   await ch.subscribe();
   MP._lobbyCh = ch;
   await MP._refreshRoster();
@@ -388,6 +395,48 @@ setInterval(() => {
     if (now - g.lastSeen > 5000) MP.ghosts.delete(id);
   }
 }, 1000);
+
+// ---------------------------------------------------------------------------
+// Catch feed — fires when ANY player lands a fish in the current derby.
+// ---------------------------------------------------------------------------
+
+MP._catchListeners = [];
+MP.onCatch = function (fn) {
+  MP._catchListeners.push(fn);
+  return () => { MP._catchListeners = MP._catchListeners.filter(f => f !== fn); };
+};
+MP._emitCatch = function (catchRow) {
+  if (!catchRow) return;
+  // Enrich with the player's display name (looked up against the live roster)
+  const p = (MP.roster || []).find(r => r.player_id === catchRow.player_id);
+  const enriched = { ...catchRow, playerName: p?.name || 'Angler' };
+  for (const fn of MP._catchListeners) { try { fn(enriched); } catch (e) { console.warn(e); } }
+};
+
+// ---------------------------------------------------------------------------
+// Quick chat — canned messages broadcast over the lobby channel. Receivers
+// show a speech bubble above the sender's kayak for a few seconds.
+// ---------------------------------------------------------------------------
+
+MP._chatListeners = [];
+MP.onChat = function (fn) {
+  MP._chatListeners.push(fn);
+  return () => { MP._chatListeners = MP._chatListeners.filter(f => f !== fn); };
+};
+MP._handleChat = function (raw) {
+  const m = raw && raw.payload;
+  if (!m || !m.id || m.id === MP.userId) return;
+  for (const fn of MP._chatListeners) { try { fn(m); } catch (e) { console.warn(e); } }
+};
+MP.sendChat = function (text) {
+  if (!MP._lobbyCh || !MP.currentDerby) return;
+  text = String(text || '').slice(0, 40);
+  if (!text) return;
+  const msg = { id: MP.userId, name: MP.getPlayerName(), text };
+  MP._lobbyCh.send({ type: 'broadcast', event: 'chat', payload: msg });
+  // Echo to ourselves so the bubble appears over our own kayak too
+  for (const fn of MP._chatListeners) { try { fn(msg); } catch (e) { console.warn(e); } }
+};
 
 // ---------------------------------------------------------------------------
 // Scoring (Phase 5)

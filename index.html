@@ -120,6 +120,17 @@
     </div>
   </div>
 
+  <!-- Live derby event feed — "Mike landed a bass · +40" pops during a derby -->
+  <div id="derby-feed"></div>
+
+  <!-- Quick-chat button (visible during derby only) + canned-message popup -->
+  <button id="chat-btn" class="hidden" title="Quick chat (T)">💬</button>
+  <div id="chat-menu" class="hidden">
+    <div class="chat-menu-title">Quick Chat</div>
+    <div class="chat-menu-grid" id="chat-menu-grid"></div>
+    <button id="chat-menu-close">Cancel</button>
+  </div>
+
   <!-- Live derby HUD — countdown timer + leaderboard, shown only during a derby -->
   <div id="derby-hud" class="hidden">
     <div class="derby-timer" id="derby-timer">5:00</div>
@@ -705,6 +716,114 @@
       cursor: pointer;
     }
 
+    /* ---- DERBY EVENT FEED (catches by everyone) ---- */
+    #derby-feed {
+      position: fixed;
+      top: 50px; left: 50%; transform: translateX(-50%);
+      z-index: 11;
+      display: flex; flex-direction: column; gap: 4px;
+      pointer-events: none;
+      max-width: 90vw;
+    }
+    #derby-feed .feed-row {
+      background: rgba(20, 35, 30, 0.82);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      border-radius: 18px;
+      padding: 5px 14px;
+      color: rgba(220, 240, 220, 0.95);
+      font: 600 12px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.3px;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #derby-feed .feed-row.in { opacity: 1; transform: translateY(0); }
+    #derby-feed .feed-row .who { color: rgba(255, 230, 150, 0.98); }
+    #derby-feed .feed-row .pts { color: rgba(190, 230, 130, 0.98); margin-left: 4px; }
+
+    /* ---- QUICK CHAT (button + popup menu) ---- */
+    #chat-btn {
+      position: fixed; bottom: 12px; left: 100px;
+      width: 36px; height: 36px; padding: 0;
+      background: rgba(20, 35, 30, 0.7);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 8px;
+      font: 18px/1 -apple-system, system-ui, sans-serif;
+      cursor: pointer;
+      z-index: 10;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      touch-action: manipulation;
+    }
+    #chat-btn.hidden { display: none; }
+    #chat-btn:hover { background: rgba(255, 220, 130, 0.18); }
+    #chat-menu {
+      position: fixed; inset: 0;
+      background: rgba(10, 22, 18, 0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 120;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+    #chat-menu.hidden { display: none; }
+    #chat-menu > .chat-menu-card,
+    #chat-menu .chat-menu-title { /* using inline structure below for brevity */ }
+    #chat-menu {
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column;
+    }
+    #chat-menu .chat-menu-title {
+      color: rgba(255, 230, 150, 0.95);
+      font: 700 16px/1 'Georgia', serif;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+    #chat-menu .chat-menu-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      width: min(360px, 92vw);
+      margin-bottom: 14px;
+    }
+    #chat-menu .chat-msg {
+      background: rgba(22, 38, 32, 0.95);
+      border: 1px solid rgba(255, 220, 130, 0.45);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 10px;
+      padding: 14px 10px;
+      font: 600 14px -apple-system, system-ui, sans-serif;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #chat-menu .chat-msg:hover, #chat-menu .chat-msg:active {
+      background: rgba(255, 220, 130, 0.18);
+      transform: translateY(-1px);
+    }
+    #chat-menu .chat-msg .hk {
+      display: inline-block; min-width: 14px;
+      margin-right: 6px;
+      font: 700 11px 'SF Mono', Menlo, monospace;
+      color: rgba(180, 200, 210, 0.7);
+    }
+    #chat-menu #chat-menu-close {
+      width: min(360px, 92vw);
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 220, 130, 0.9);
+      border-radius: 8px;
+      padding: 10px;
+      font: 600 13px -apple-system, system-ui, sans-serif;
+      letter-spacing: 1px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
     /* ---- DERBY HUD (live leaderboard + countdown) ---- */
     #derby-hud {
       position: fixed; top: 10px; right: 10px;
@@ -969,6 +1088,14 @@
       /* Push sonar (also top-center) down while the derby HUD is on top */
       body.derby-live #sonar { top: 36px; }
 
+      /* Chat button on mobile: sit between joystick and cast button at the
+         bottom. Clear of menu/mute (which live top-left on mobile). */
+      #chat-btn {
+        bottom: 36px; left: 50%; transform: translateX(-50%);
+        width: 48px; height: 48px;
+        font-size: 22px;
+      }
+
       /* During a live derby, hide the regular top-left text HUD so the
          catch-toast and timer aren't competing for attention. */
       body.derby-live #hud { display: none; }
@@ -1212,8 +1339,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=11"></script>
-  <script src="sprites.js?v=11"></script>
-  <script src="sketch.js?v=11"></script>
+  <script src="multiplayer.js?v=12"></script>
+  <script src="sprites.js?v=12"></script>
+  <script src="sketch.js?v=12"></script>
 </body>
 </html>

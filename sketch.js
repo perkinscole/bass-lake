@@ -1337,6 +1337,8 @@ function draw() {
   // Ghost kayaks for everyone else in the derby — same layer as the local
   // kayak, drawn with a translucent body + a name label above each.
   drawDerbyGhosts();
+  // Chat bubbles ride above ghost names; drawn for local + remote players.
+  drawChatBubbles();
 
   // Broadcast our own position + active cast to peers (~10 Hz cap inside MP)
   if (window.MP && MP.broadcastPosition) {
@@ -4326,6 +4328,7 @@ function wireDerbyUI() {
   document.getElementById('results-close')?.addEventListener('click', async () => {
     document.getElementById('derby-results')?.classList.add('hidden');
     document.getElementById('menu')?.classList.remove('hidden');
+    document.getElementById('chat-btn')?.classList.add('hidden');
     document.body.classList.remove('derby-live');
     menuOpen = true;
     derbyResultsShown = false;
@@ -4333,6 +4336,15 @@ function wireDerbyUI() {
     try { history.replaceState(null, '', location.pathname); } catch {}
     if (window.MP) { try { await MP.leaveDerby(); } catch {} }
   });
+
+  // ---- Hooked-fish event feed: ANY catch in the derby shows up briefly
+  MP.onCatch((c) => {
+    if (c.player_id === MP.userId) return;   // skip our own (we already see the local toast)
+    pushDerbyFeed(c.playerName, c.species, c.weight, c.points);
+  });
+
+  // ---- Quick chat — button + popup menu + speech bubbles
+  wireQuickChat();
 
   // Auto-join via ?pin=ABC123 (share-link entry point) -----------------
   try {
@@ -4554,6 +4566,7 @@ function enterDerbyWorld(d) {
   document.getElementById('derby')?.classList.add('hidden');
   document.getElementById('menu')?.classList.add('hidden');
   document.getElementById('derby-hud')?.classList.remove('hidden');
+  document.getElementById('chat-btn')?.classList.remove('hidden');
   // body class drives mobile-only CSS (hide regular HUD, etc.)
   document.body.classList.add('derby-live');
   menuOpen = false;
@@ -4691,5 +4704,140 @@ function escapeHtmlGlobal(s) {
   return String(s ?? '').replace(/[<>&"']/g, c => ({
     '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;',
   }[c]));
+}
+
+// ============================================================================
+// Hooked-fish event feed (Phase 5 follow-up)
+// ============================================================================
+
+// Pretty-print species names for the feed: "rainbowTrout" -> "rainbow trout"
+function prettySpeciesName(species) {
+  return String(species || 'fish').replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+}
+
+function pushDerbyFeed(playerName, species, weight, points) {
+  const feed = document.getElementById('derby-feed');
+  if (!feed) return;
+  const row = document.createElement('div');
+  row.className = 'feed-row';
+  const w = weight ? `${Math.round(weight * 10) / 10}″ ` : '';
+  row.innerHTML = `🎣 <span class="who">${escapeHtmlGlobal(playerName)}</span> landed a ${w}${escapeHtmlGlobal(prettySpeciesName(species))}<span class="pts">+${points || 0}</span>`;
+  feed.appendChild(row);
+  // Animate in
+  requestAnimationFrame(() => row.classList.add('in'));
+  // Live for 4s then fade out and remove
+  setTimeout(() => row.classList.remove('in'), 4000);
+  setTimeout(() => row.remove(), 4400);
+  // Cap to 4 rows so the feed never gets out of hand
+  while (feed.children.length > 4) feed.removeChild(feed.firstChild);
+}
+
+// ============================================================================
+// Quick chat (Phase 5 follow-up)
+// ============================================================================
+
+const QUICK_CHATS = [
+  'Nice!', 'Big one!', 'Lucky!', 'Lol',
+  'Hello', 'GG', 'GLHF', 'Where’s the fish?',
+];
+
+// Bubble timers per playerId. Map<playerId, { text, until }>
+const chatBubbles = new Map();
+
+function wireQuickChat() {
+  const btn   = document.getElementById('chat-btn');
+  const menu  = document.getElementById('chat-menu');
+  const grid  = document.getElementById('chat-menu-grid');
+  const close = document.getElementById('chat-menu-close');
+  if (!btn || !menu || !grid) return;
+
+  // Populate the canned-message grid with hotkey numbers (1..8)
+  grid.innerHTML = QUICK_CHATS.map((msg, i) =>
+    `<button class="chat-msg" data-msg="${escapeHtmlGlobal(msg)}">` +
+      `<span class="hk">${i + 1}</span>${escapeHtmlGlobal(msg)}</button>`
+  ).join('');
+
+  const openMenu  = () => menu.classList.remove('hidden');
+  const closeMenu = () => menu.classList.add('hidden');
+
+  btn.addEventListener('click', openMenu);
+  close.addEventListener('click', closeMenu);
+  // Click the dimmed background to dismiss
+  menu.addEventListener('click', (e) => { if (e.target === menu) closeMenu(); });
+
+  grid.querySelectorAll('.chat-msg').forEach(b => {
+    b.addEventListener('click', () => {
+      const text = b.dataset.msg;
+      if (window.MP && MP.sendChat) MP.sendChat(text);
+      closeMenu();
+    });
+  });
+
+  // T to open quick chat, 1-8 to send canned messages instantly
+  window.addEventListener('keydown', (e) => {
+    // Ignore when typing in inputs
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (!derbyLive) return;
+    if (e.key === 't' || e.key === 'T') { e.preventDefault(); openMenu(); return; }
+    if (menu.classList.contains('hidden')) return;
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= QUICK_CHATS.length) {
+      MP.sendChat(QUICK_CHATS[n - 1]);
+      closeMenu();
+    }
+    if (e.key === 'Escape') closeMenu();
+  });
+
+  // Incoming chat -> show bubble over sender's kayak for ~3s
+  MP.onChat((m) => {
+    chatBubbles.set(m.id, { text: m.text, until: performance.now() + 3000 });
+    playSound?.('paddle', { volume: 0.15, rate: 1.8 });  // tiny audible blip
+  });
+}
+
+// Draw chat bubbles over the local player and any ghost with a recent message.
+// Called from the main draw loop AFTER kayaks and cast lines are drawn so the
+// bubble sits on top of everything.
+function drawChatBubbles() {
+  if (chatBubbles.size === 0) return;
+  const now = performance.now();
+  for (const [id, b] of chatBubbles) {
+    if (now > b.until) { chatBubbles.delete(id); continue; }
+    let x, y;
+    if (id === MP?.userId && player) {
+      x = player.pos.x; y = player.pos.y;
+    } else if (MP?.ghosts?.has(id)) {
+      const g = MP.ghosts.get(id);
+      const span = Math.max(50, g.recvT - g.prevRecvT);
+      const t = constrain((now - g.prevRecvT) / span, 0, 1.5);
+      x = lerp(g.prevX, g.x, t);
+      y = lerp(g.prevY, g.y, t);
+    } else {
+      continue;
+    }
+    drawChatBubble(x, y, b.text);
+  }
+}
+
+function drawChatBubble(cx, cy, text) {
+  push();
+  translate(cx, cy - 56);
+  if (typeof zoom === 'number' && zoom > 0) scale(1 / zoom);
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  textFont('-apple-system, system-ui, sans-serif');
+  const w = Math.max(40, textWidth(text) + 18);
+  const h = 22;
+  noStroke();
+  fill(245, 245, 240, 235);
+  rectMode(CENTER);
+  rect(0, 0, w, h, 6);
+  // Pointer below
+  triangle(-5, h/2 - 1, 5, h/2 - 1, 0, h/2 + 6);
+  rectMode(CORNER);
+  fill(30, 40, 35, 240);
+  text(text, 0, 1);
+  pop();
 }
 
