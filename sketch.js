@@ -1338,11 +1338,12 @@ function draw() {
   // kayak, drawn with a translucent body + a name label above each.
   drawDerbyGhosts();
 
-  // Broadcast our own position to peers (~10 Hz cap inside MP.broadcastPosition)
+  // Broadcast our own position + active cast to peers (~10 Hz cap inside MP)
   if (window.MP && MP.broadcastPosition) {
     MP.broadcastPosition({
       x: player.pos.x, y: player.pos.y,
       heading: player.heading, paddlePhase: player.paddlePhase,
+      cast,    // null when not casting; FlyCast instance during a cast
     });
   }
 
@@ -4410,7 +4411,77 @@ function drawDerbyGhosts() {
     const y  = lerp(g.prevY, g.y, t);
     const h  = lerpAngle(g.prevH, g.h, t);
     drawGhostKayak(x, y, h, g.pp, g.name);
+    // Cast line + fly — only drawn when this ghost is actively casting.
+    if (g.cs) {
+      const fx = lerp(g.prevCx, g.cx, t);
+      const fy = lerp(g.prevCy, g.cy, t);
+      // Rod tip mirrors the local _rodTip() math: kayak pos + ahead by 0.9·size
+      const rx = x + Math.cos(h) * 22 * 0.9;
+      const ry = y + Math.sin(h) * 22 * 0.9;
+      drawGhostCast(rx, ry, fx, fy, g.cs);
+    }
   }
+}
+
+// Draw another player's fly line + fly. State-driven look:
+//   'a' aerial   — false-casting back-and-forth, loaded loop in the line
+//   'd' delivering — line streams toward the landing point
+//   'f' fishing  — gentle sag, fly drifting on water
+//   'h' hooked   — taut straight line + tension wobble
+//   'r' reeling  — same as hooked, just shorter over time
+function drawGhostCast(rx, ry, fx, fy, state) {
+  const dx = fx - rx, dy = fy - ry;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 2) return;
+
+  // Perpendicular vector for curving the bezier control point
+  const px = -dy / dist, py = dx / dist;
+
+  // Pick a control offset based on state. Positive = "above" relative to the
+  // line direction (gives a nice loaded-loop look for aerial casts).
+  let curve = 0;
+  let lineAlpha = 180;
+  let lineColor = [240, 240, 230];
+  if (state === 'a') {
+    // Aerial — animated wobble so the line looks alive, not pasted on
+    curve = -8 - Math.sin(frameCount * 0.4) * 6;
+  } else if (state === 'd') {
+    curve = -4;
+  } else if (state === 'f') {
+    curve = 3;                              // slight sag while fishing
+    lineAlpha = 150;
+  } else if (state === 'h' || state === 'r') {
+    curve = Math.sin(frameCount * 0.35) * 1.6;   // taut, tiny vibration
+    lineColor = [255, 220, 130];           // warm tint when fighting a fish
+  }
+
+  // Mid-point control for a quadratic bezier — keeps the curve cheap to draw
+  const cx = rx + dx * 0.5 + px * curve;
+  const cy = ry + dy * 0.5 + py * curve;
+
+  push();
+  noFill();
+  stroke(lineColor[0], lineColor[1], lineColor[2], lineAlpha);
+  strokeWeight(1.2);
+  beginShape();
+  vertex(rx, ry);
+  quadraticVertex(cx, cy, fx, fy);
+  endShape();
+  noStroke();
+
+  // Fly itself — small dot on the water (or in the air during 'a'/'d')
+  // matches the local cast's vibe without giving away who's hooked.
+  fill(40, 30, 22, 220);
+  ellipse(fx, fy, 3.5, 3.5);
+  if (state === 'f' || state === 'h') {
+    // Subtle ripple ring while on the water
+    noFill();
+    stroke(220, 240, 220, 80);
+    strokeWeight(1);
+    ellipse(fx, fy, 6 + (frameCount % 30) * 0.4, 6 + (frameCount % 30) * 0.4);
+    noStroke();
+  }
+  pop();
 }
 
 function lerpAngle(a, b, t) {

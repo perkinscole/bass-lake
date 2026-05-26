@@ -328,25 +328,45 @@ MP._handlePos = function (raw) {
       name: p.name || 'Angler',
       x: p.x, y: p.y, h: p.h, pp: p.pp || 0,
       prevX: p.x, prevY: p.y, prevH: p.h,
+      cs: null,                              // cast state ('a'|'d'|'f'|'h'|'r'|null)
+      cx: 0, cy: 0, prevCx: 0, prevCy: 0,    // ghost's fly position (interpolated)
       recvT: now, prevRecvT: now - 100,
       lastSeen: now,
     };
     MP.ghosts.set(p.id, g);
   } else {
     g.prevX = g.x; g.prevY = g.y; g.prevH = g.h;
+    g.prevCx = g.cx; g.prevCy = g.cy;
     g.prevRecvT = g.recvT;
     g.recvT = now;
     g.x = p.x; g.y = p.y; g.h = p.h; g.pp = p.pp || 0;
     if (p.name) g.name = p.name;
     g.lastSeen = now;
   }
+  // Cast info (compact: only present when this ghost is actually casting)
+  if (p.c) {
+    g.cs = p.c.s;                            // one-letter state code
+    if (g.cx === 0 && g.cy === 0) {          // first frame with a cast — snap
+      g.prevCx = p.c.fx; g.prevCy = p.c.fy;
+    }
+    g.cx = p.c.fx; g.cy = p.c.fy;
+  } else {
+    g.cs = null;
+  }
 };
 
-MP.broadcastPosition = function ({ x, y, heading, paddlePhase }) {
+MP.broadcastPosition = function ({ x, y, heading, paddlePhase, cast }) {
   if (!MP._lobbyCh || !MP.currentDerby || MP.currentDerby.status !== 'live') return;
   const now = performance.now();
   if (now - MP._lastSent < 100) return;   // ~10 Hz cap
   MP._lastSent = now;
+  // Compact cast packet: one-letter state + rounded fly position. Only
+  // included while a cast is active (most of the time it's null).
+  const c = cast && cast.state && cast.state !== 'done' ? {
+    s:  cast.state[0],                                   // 'a'erial, 'd'elivering, 'f'ishing, 'h'ooked, 'r'eeling
+    fx: Math.round(cast.flyX),
+    fy: Math.round(cast.flyY),
+  } : null;
   MP._lobbyCh.send({
     type: 'broadcast', event: 'pos',
     payload: {
@@ -356,6 +376,7 @@ MP.broadcastPosition = function ({ x, y, heading, paddlePhase }) {
       y:    Math.round(y),
       h:    Math.round(heading * 1000) / 1000,
       pp:   Math.round((paddlePhase || 0) * 100) / 100,
+      c,
     },
   });
 };
