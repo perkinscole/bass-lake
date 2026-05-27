@@ -2056,10 +2056,11 @@
     /* Sonar header normally has pointer-events:none from its parent.
        The X button needs them on so it remains clickable. */
     #sonar .sonar-header { pointer-events: auto; }
-    /* Small pill to re-enable the sonar after it's been hidden */
+    /* Small pill to re-enable the sonar after it's been hidden.
+       Tucked down so it never touches the top keyboard-hint text bar. */
     #sonar-show {
       position: fixed;
-      top: 8px; left: 50%; transform: translateX(-50%);
+      top: 42px; left: 50%; transform: translateX(-50%);
       z-index: 9;
       background: rgba(15, 22, 18, 0.85);
       border: 1px solid rgba(255, 220, 130, 0.45);
@@ -2099,8 +2100,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=38"></script>
-  <script src="sprites.js?v=38"></script>
-  <script src="sketch.js?v=38"></script>
+  <script src="multiplayer.js?v=39"></script>
+  <script src="sprites.js?v=39"></script>
+  <script src="sketch.js?v=39"></script>
 </body>
 </html>
