@@ -51,9 +51,12 @@
     <div class="sonar-header">
       <span class="sonar-title">SONAR</span>
       <span class="sonar-range">RANGE 250FT</span>
+      <button id="sonar-hide" class="sonar-x" title="Hide sonar (V)" aria-label="hide sonar">×</button>
     </div>
     <canvas id="sonar-canvas" width="280" height="80"></canvas>
   </div>
+  <!-- Tiny re-enable pill, visible only when the sonar has been hidden -->
+  <button id="sonar-show" class="hidden" title="Show sonar (V)">📡</button>
 
   <!-- Fight UI: visible while a fish is on the line -->
   <div id="fight-ui" class="hidden">
@@ -2040,6 +2043,36 @@
       margin-bottom: 4px;
     }
     #sonar .sonar-range { font-weight: 400; opacity: 0.75; }
+    #sonar .sonar-x {
+      background: none; border: none;
+      color: rgba(255, 220, 130, 0.7);
+      font: 16px/1 -apple-system, system-ui, sans-serif;
+      cursor: pointer; padding: 0 0 0 6px;
+      margin-left: 4px;
+      pointer-events: auto;
+      touch-action: manipulation;
+    }
+    #sonar .sonar-x:hover { color: rgba(255, 220, 130, 0.98); }
+    /* Sonar header normally has pointer-events:none from its parent.
+       The X button needs them on so it remains clickable. */
+    #sonar .sonar-header { pointer-events: auto; }
+    /* Small pill to re-enable the sonar after it's been hidden */
+    #sonar-show {
+      position: fixed;
+      top: 8px; left: 50%; transform: translateX(-50%);
+      z-index: 9;
+      background: rgba(15, 22, 18, 0.85);
+      border: 1px solid rgba(255, 220, 130, 0.45);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font: 16px/1 -apple-system, system-ui, sans-serif;
+      color: rgba(255, 230, 150, 0.95);
+      cursor: pointer;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      touch-action: manipulation;
+    }
+    #sonar-show:hover { background: rgba(255, 220, 130, 0.18); }
+    #sonar-show.hidden { display: none; }
     #sonar canvas {
       display: block;
       background: #0a1813;
@@ -2066,8 +2099,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=36"></script>
-  <script src="sprites.js?v=36"></script>
-  <script src="sketch.js?v=36"></script>
+  <script src="multiplayer.js?v=37"></script>
+  <script src="sprites.js?v=37"></script>
+  <script src="sketch.js?v=37"></script>
 </body>
 </html>

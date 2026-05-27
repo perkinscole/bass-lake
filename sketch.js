@@ -399,8 +399,15 @@ function refreshUnlocks() {
   MAX_CAST_RANGE = ROD_RANGES[playerState.unlocks.rod] || 220;
   if (player) player.maxSpeed = KAYAK_BASE_SPEED * (KAYAK_SPEEDS[playerState.unlocks.kayak] || 1);
   // hide sonar element if not unlocked
-  let sonarEl = document.getElementById('sonar');
-  if (sonarEl) sonarEl.style.display = playerState.unlocks.sonar ? '' : 'none';
+  // Show sonar only when it's unlocked AND the player hasn't hidden it.
+  // The hidden state is its own preference (persisted via saveProgress)
+  // so toggling it doesn't lose the unlock.
+  const sonarEl    = document.getElementById('sonar');
+  const sonarShowEl = document.getElementById('sonar-show');
+  const owned  = !!playerState.unlocks.sonar;
+  const hidden = !!playerState.sonarHidden;
+  if (sonarEl)     sonarEl.style.display     = (owned && !hidden) ? '' : 'none';
+  if (sonarShowEl) sonarShowEl.classList.toggle('hidden', !owned || !hidden);
   // make sure selected fly is unlocked
   if (!playerState.unlocks.flies[selectedFly]) selectedFly = 'fly';
   // refresh tackle shop UI if open
@@ -439,6 +446,7 @@ function loadProgress() {
         if (parsed.unlocks.kayak != null) playerState.unlocks.kayak = parsed.unlocks.kayak;
         if (parsed.unlocks.sonar != null) playerState.unlocks.sonar = parsed.unlocks.sonar;
       }
+      if (parsed.sonarHidden != null) playerState.sonarHidden = parsed.sonarHidden;
     }
     currentLevel = playerState.level || 'bassLake';
   } catch {}
@@ -894,6 +902,9 @@ function finishSetup() {
   if (menuBtn) menuBtn.addEventListener('click', () => toggleMenu());
   let netBtn = document.getElementById('net-btn');
   if (netBtn) netBtn.addEventListener('click', () => sampleWaterAtKayak());
+  // Sonar show/hide buttons
+  document.getElementById('sonar-hide')?.addEventListener('click', () => toggleSonarVisible(false));
+  document.getElementById('sonar-show')?.addEventListener('click', () => toggleSonarVisible(true));
   let muteBtn = document.getElementById('mute-btn');
   if (muteBtn) {
     muteBtn.textContent = muted ? '🔇' : '🔊';
@@ -2276,6 +2287,17 @@ function keyPressed() {
     else closeFlyBox();
   }
   if (key === 'n' || key === 'N') sampleWaterAtKayak();
+  if (key === 'v' || key === 'V') toggleSonarVisible(playerState.sonarHidden ? true : false);
+}
+
+// Toggle the sonar's visibility. If `show` is true, reveal it (only works
+// if it's actually unlocked); if false, hide it. State persists via
+// saveProgress so the choice survives a reload.
+function toggleSonarVisible(show) {
+  if (!playerState.unlocks.sonar) return;
+  playerState.sonarHidden = !show;
+  saveProgress();
+  refreshUnlocks();
 }
 
 function toggleMenu() {
