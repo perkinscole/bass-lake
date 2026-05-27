@@ -176,6 +176,15 @@ const LEVELS = {
       ],
     },
     palette: {
+      // Effect colors — wavelets/caustics/bubbles/ripples render in these
+      // tones so they pop on the level's specific water color. Adjust per
+      // level so light effects don't disappear on a light surface.
+      wavelet:   [180, 215, 200],   // teal-grey wavelet streaks
+      caustic:   [140, 195, 175],   // soft caustic glints
+      bubble:    [220, 240, 255],   // air bubbles
+      ripple:    [220, 240, 255],   // expanding rings
+      fishVisDepth:     0.18,       // panfish visibility cutoff (z)
+      predatorVisDepth: 0.22,       // bass-class visibility cutoff
       forest:    [80, 95, 45],     // warm yellow-green meadow
       forestSpeck: [60, 80, 40],
       sand:      [195, 170, 115],
@@ -243,6 +252,15 @@ const LEVELS = {
     // Reads like an overhead topo map.
     topoFeatures: { count: 22, sizeRange: [80, 200] },
     palette: {
+      // Alpine: clear cold water reads through more, but the same light
+      // teal wavelet color disappears on the lighter surface. Use darker
+      // navy/grey wavelets and caustics that contrast properly.
+      wavelet:   [50, 80, 110],       // dark navy wavelet streaks
+      caustic:   [200, 230, 255],     // bright cyan caustic glints
+      bubble:    [40, 70, 100],       // dark blue rings — visible on light water
+      ripple:    [30, 60, 90],
+      fishVisDepth:     0.32,         // see fish deeper through clear water
+      predatorVisDepth: 0.42,
       forest:    [232, 236, 242],     // bright snow with bluish cast
       forestSpeck: [140, 148, 158],   // grey rock specks (snow-dusted boulders)
       sand:      [240, 244, 250],     // pure snow at the water edge
@@ -2528,6 +2546,9 @@ class Lake {
     // got a thin dark outline that read as a black ring on dark green water.
     noStroke();
     let t = frameCount * 0.015;
+    const pal = lvl().palette;
+    const cauC = pal.caustic || [140, 195, 175];
+    const wavC = pal.wavelet || [180, 215, 200];
 
     // Caustics — soft pulsing brighter circles
     for (let c of this.caustics) {
@@ -2536,7 +2557,7 @@ class Lake {
       if (n < 0.62) continue;
       let alpha = (n - 0.62) * 60;
       let drift = sin(t * 0.5 + c.seed * 6) * 3;
-      fill(140, 195, 175, alpha);
+      fill(cauC[0], cauC[1], cauC[2], alpha);
       ellipse(c.x + drift, c.y - drift * 0.6, c.size * (0.7 + n * 0.5));
     }
 
@@ -2552,7 +2573,7 @@ class Lake {
       let dx = windX * driftMag - windX * 30;
       let dy = windY * driftMag - windY * 30;
       let lx = w.x + dx, ly = w.y + dy;
-      stroke(180, 215, 200, alpha);
+      stroke(wavC[0], wavC[1], wavC[2], alpha);
       let edx = cos(w.a) * w.len * 0.5;
       let edy = sin(w.a) * w.len * 0.5;
       line(lx - edx, ly - edy, lx + edx, ly + edy);
@@ -2657,8 +2678,21 @@ const SPECIES = {
     zRange: [0.05, 0.35],
   },
   cutthroatTrout: {
-    class: 'bass',
+    // Real cutthroats rise to hatches like other trout. Switched from
+    // bass-class (lurker) to panfish so they get the hatch-attraction
+    // force and actually congregate at rising water.
+    class: 'panfish',
     spooky: true,
+    sizeRange: [10, 15],
+    bodyAspect: 0.42,
+    maxSpeed: 1.25, maxForce: 0.032,
+    sepR: 18, neighR: 40, fleeR: 120,
+    sepW: 1.6, aliW: 0.7, cohW: 0.6, fleeW: 2.8,
+    habitat: 'rocks', habitatW: 0.03,
+    depthBias: -0.0003,
+    schoolWith: null,
+    depthAlpha: 218,
+    zRange: [0.10, 0.45],
   },
 
   // ---- BASS LAKE additions (Phase 7) ----
@@ -2988,7 +3022,8 @@ class Panfish {
     // Top-down view through the water surface: fish are only visible if they
     // are near the surface. Below the visibility threshold they're completely
     // invisible — the player has to read ripples and wakes instead.
-    const SURFACE_Z = 0.18;
+    // Alpine water is clear — fish stay visible deeper than in bass lake.
+    const SURFACE_Z = (lvl().palette.fishVisDepth) || 0.18;
     if (this.z >= SURFACE_Z) return;
     let surfaceVis = pow(1 - this.z / SURFACE_Z, 2);  // 1 at z=0, 0 at z=SURFACE_Z
 
@@ -3287,8 +3322,9 @@ class Bass {
 
   draw() {
     // Bass are only visible from above when they surge near the surface during a
-    // strike. Otherwise they're completely hidden below.
-    const SURFACE_Z = 0.22;
+    // strike. Otherwise they're completely hidden below. Alpine water is
+    // clearer so the predator silhouette stays visible deeper.
+    const SURFACE_Z = (lvl().palette.predatorVisDepth) || 0.22;
     if (this.z >= SURFACE_Z) return;
     let surfaceVis = pow(1 - this.z / SURFACE_Z, 2);
 
@@ -4585,8 +4621,9 @@ class Ripple {
   update() { this.r += 1.2; }
   draw() {
     noFill();
-    let a = map(this.r, 0, this.maxR, 200, 0);
-    stroke(220, 240, 255, a);
+    const c = lvl().palette.ripple || [220, 240, 255];
+    let a = map(this.r, 0, this.maxR, 220, 0);
+    stroke(c[0], c[1], c[2], a);
     strokeWeight(1);
     ellipse(this.x, this.y, this.r * 2);
     noStroke();
@@ -4605,7 +4642,8 @@ class Bubble {
   update() { this.y += this.vy; this.life--; }
   draw() {
     noFill();
-    stroke(220, 240, 255, this.life * 3);
+    const c = lvl().palette.bubble || [220, 240, 255];
+    stroke(c[0], c[1], c[2], this.life * 3);
     strokeWeight(1);
     ellipse(this.x, this.y, this.r * 2);
     noStroke();
@@ -6358,13 +6396,76 @@ const FIELD_GUIDE_INSECTS = [
   },
 ];
 
+// Fishing knowledge — fundamentals every fly angler learns. Concept-level
+// entries (no portrait) covering reading water, gear, casting, fly choice,
+// playing fish, and catch-and-release ethics.
+const FIELD_GUIDE_KNOWLEDGE = [
+  {
+    id: 'matchTheHatch', name: 'Matching the Hatch', latin: 'The first rule',
+    icon: '🪶', size: '—', lakes: 'Every water',
+    fact: 'When fish are keyed on a specific insect they refuse anything else, no matter how pretty. The fix: identify what bugs are coming off the water — size, color, silhouette — and pick a fly that matches all three. Watch the surface for rises and the air for what\'s flying. When you can\'t see it, lift a rock or use the sample net to see what\'s in the water column.',
+  },
+  {
+    id: 'readingWater', name: 'Reading the Water', latin: 'Where fish live',
+    icon: '🌊', size: '—', lakes: 'Every water',
+    fact: 'Fish hold where current delivers food while letting them rest. On streams that means seams (where fast water meets slow), pocket water behind boulders, and undercut banks. On lakes: weed lines, drop-offs, submerged structure (logs, snags), wind-blown shores, and inlet/outlet currents. The first 30 seconds at a new spot should be looking, not casting.',
+  },
+  {
+    id: 'rodReel', name: 'Rod & Reel', latin: 'Weight and action',
+    icon: '🎣', size: '#1–#14 line weight', lakes: 'Match to species',
+    fact: 'Fly rods are rated by line weight: #2–#4 for tiny streams and panfish, #5–#6 for trout and bass on most water, #7–#9 for big fish or windy days, #10+ for saltwater. The rod\'s ACTION (how it flexes) matters too — slow rods bend deep and load with little line; fast rods stay stiff and cast for distance. The reel mostly stores line; the drag matters when a big fish runs.',
+  },
+  {
+    id: 'flyLines', name: 'Fly Line Types', latin: 'Floating, sinking, in-between',
+    icon: '🧶', size: 'Matched to rod weight', lakes: 'Every water',
+    fact: 'A fly line\'s WEIGHT casts the fly (unlike spin gear, where the LURE casts the line). Floating lines (WF or DT) for dry flies and shallow nymphs. Sink-tip lines drop the fly to mid-water for streamers. Full-sink lines for deep stillwater work. Color matters less than the taper: weight-forward (WF) for distance, double-taper (DT) for delicate presentation.',
+  },
+  {
+    id: 'leaderTippet', name: 'Leader & Tippet', latin: 'The invisible connection',
+    icon: '🪢', size: '7.5–12 ft total · 5X–7X tippet',
+    lakes: 'Every water',
+    fact: 'The leader is the tapered mono between the fly line and your fly — heavier at the butt, narrowing to the fine tippet. Tippet is rated by "X": higher X = finer line (5X is about 5 lb, 7X about 2 lb). Use lighter tippet in clear water and for small flies; heavier when chasing big fish in cover. Replace the last 12–18 inches after every few flies.',
+  },
+  {
+    id: 'flySelection', name: 'Fly Selection', latin: 'Right pattern, right time',
+    icon: '🦟', size: '—', lakes: 'Every water',
+    fact: 'Three quick rules. (1) Match what\'s naturally available — see Matching the Hatch. (2) When nothing\'s showing, go SMALLER than you think for clear water and BIGGER for stained. (3) Color usually matters less than profile and movement — a dead-drift natural beats a flashy pattern dragging across the current.',
+  },
+  {
+    id: 'casting', name: 'Casting Mechanics', latin: 'The 10-and-2 myth',
+    icon: '🎯', size: '—', lakes: 'Every water',
+    fact: 'A fly cast is about loading the rod with line weight, then unloading it forward. Stop the rod CRISPLY at the front and back of the stroke — drifting through the stop is the #1 mistake. Keep your wrist locked; the elbow drives. The line follows the rod tip, so wherever you point at the stop is where the fly goes. Power on demand, not muscle.',
+  },
+  {
+    id: 'setHook', name: 'Setting the Hook', latin: 'The strike',
+    icon: '⚡', size: '—', lakes: 'Every water',
+    fact: 'Trout: a SHORT lift of the rod tip ("trout set") drives the hook home without ripping the fly out. Bass and pike: a hard sideways "strip set" with the line hand keeps the fly buried in their jaw. Setting too hard on trout breaks tippet; setting too softly on bass means the fly pulls free. The hook should always be sharp — most "lost fish" were never actually hooked.',
+  },
+  {
+    id: 'playLand', name: 'Playing & Landing', latin: 'Fighting fair',
+    icon: '🤝', size: '—', lakes: 'Every water',
+    fact: 'Keep the rod up at ~45° so it cushions runs through the bend. Apply side-pressure (rod over to one side) to turn a running fish — straight back puts max load on the tippet. Let big fish run against the reel\'s drag; don\'t palm the spool. Land the fish quickly so it recovers; an exhausted fish dies even after release. A rubber-mesh net is gentler than a hand grip.',
+  },
+  {
+    id: 'catchRelease', name: 'Catch & Release', latin: 'Leave them swimming',
+    icon: '♻️', size: '—', lakes: 'Every water',
+    fact: 'Use barbless hooks (pinch the barb down with pliers). Keep the fish wet — every second out of water is brutal. Touch with wet hands only; dry skin strips their protective slime. Support the body horizontally; never hang a fish by its lower jaw. Revive in calm flow facing the current until it kicks free. Photograph quickly. The fish you release lives to be caught again.',
+  },
+  {
+    id: 'safety', name: 'Safety', latin: 'Come home tomorrow',
+    icon: '🦺', size: '—', lakes: 'Every water',
+    fact: 'Wear a PFD on any boat — even an inflatable kayak. Lightning kills more anglers than anything else; off the water at the first rumble. Watch for snakes on warmwater banks and slippery rocks on coldwater streams. Hooks in skin: push it through, snip the barb, back the shank out — or just go to urgent care. Hypothermia onsets fast in alpine water; layers and a change of clothes save lives.',
+  },
+];
+
 // All categories — order here defines the tab order.
 const FIELD_GUIDE = {
-  fish:    { label: 'Fish',        entries: FIELD_GUIDE_FISH },
-  insects: { label: 'Insects',     entries: FIELD_GUIDE_INSECTS },
-  birds:   { label: 'Birds',       entries: FIELD_GUIDE_BIRDS },
-  plants:  { label: 'Plants',      entries: FIELD_GUIDE_PLANTS },
-  science: { label: 'Lake Science', entries: FIELD_GUIDE_SCIENCE },
+  fish:      { label: 'Fish',         entries: FIELD_GUIDE_FISH },
+  insects:   { label: 'Insects',      entries: FIELD_GUIDE_INSECTS },
+  birds:     { label: 'Birds',        entries: FIELD_GUIDE_BIRDS },
+  plants:    { label: 'Plants',       entries: FIELD_GUIDE_PLANTS },
+  science:   { label: 'Lake Science', entries: FIELD_GUIDE_SCIENCE },
+  knowledge: { label: 'Fly Fishing',  entries: FIELD_GUIDE_KNOWLEDGE },
 };
 const FIELD_GUIDE_CATEGORIES = Object.keys(FIELD_GUIDE);
 
