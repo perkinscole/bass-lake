@@ -112,6 +112,54 @@ let selectedFly = 'fly';
 let catchCount = {};
 
 // ----------------------------------------------------------------------------
+// FLY PATTERNS — specific imitations within each fly category. Selecting a
+// pattern picks BOTH the category (fly/nymph/woolyBugger) and the specific
+// pattern within it. The category sets bite range + base catches; the
+// pattern adds a hatch-match bonus when its `hatches` list contains the
+// active hatch's id.
+// ----------------------------------------------------------------------------
+const FLY_PATTERNS = {
+  fly: [
+    { id: 'adams',          label: 'Adams',           img: 'images/adams-dry-fly.png', hatches: ['mayfly'],          desc: 'Classic mayfly dun' },
+    { id: 'elkHairCaddis',  label: 'Elk Hair Caddis', img: null,                        hatches: ['caddis'],          desc: 'Skitters like a caddis' },
+    { id: 'griffithsGnat',  label: "Griffith's Gnat", img: null,                        hatches: ['midge'],           desc: 'Tiny midge cluster' },
+    { id: 'parachuteAdams', label: 'Parachute Adams', img: null,                        hatches: ['mayfly'],          desc: 'Low-riding all-purpose dun' },
+  ],
+  nymph: [
+    { id: 'princeNymph',    label: 'Prince Nymph',    img: 'images/prince-nymph.png',  hatches: ['mayfly','stone'],  desc: 'Attractor with biot wings' },
+    { id: 'pheasantTail',   label: 'Pheasant Tail',   img: null,                        hatches: ['mayfly'],          desc: 'Universal mayfly nymph' },
+    { id: 'haresEar',       label: "Hare's Ear",      img: null,                        hatches: ['caddis','mayfly'], desc: 'Buggy and impressionistic' },
+    { id: 'zebraMidge',     label: 'Zebra Midge',     img: null,                        hatches: ['midge'],           desc: 'Tiny chironomid pupa' },
+    { id: 'damselNymph',    label: 'Damsel Nymph',    img: null,                        hatches: ['damsel'],          desc: 'Slender weed-bed prowler' },
+    { id: 'stoneflyNymph',  label: 'Stonefly Nymph',  img: null,                        hatches: ['stone'],           desc: 'Big rubber-leg pattern' },
+  ],
+  woolyBugger: [
+    { id: 'woolyBugger',    label: 'Wooly Bugger',    img: 'images/woolly-bugger.png', hatches: ['baitball'],        desc: 'Imitates leeches + small fish' },
+    { id: 'clouserMinnow',  label: 'Clouser Minnow',  img: null,                        hatches: ['baitball'],        desc: 'Dumbbell eyes ride point-up' },
+    { id: 'muddlerMinnow',  label: 'Muddler Minnow',  img: null,                        hatches: [],                  desc: 'Spun deer-hair sculpin head' },
+    { id: 'zonker',         label: 'Zonker',          img: null,                        hatches: ['baitball'],        desc: 'Rabbit-strip baitfish' },
+  ],
+};
+// Active pattern within each category. Persisted to localStorage so the
+// player's selection survives reloads.
+let selectedPatterns = { fly: 'adams', nymph: 'princeNymph', woolyBugger: 'woolyBugger' };
+try {
+  const saved = JSON.parse(localStorage.getItem('bassLake.patterns') || '{}');
+  for (const k of Object.keys(selectedPatterns)) if (saved[k]) selectedPatterns[k] = saved[k];
+} catch {}
+function activePattern(flyType = selectedFly) {
+  const list = FLY_PATTERNS[flyType] || [];
+  return list.find(p => p.id === selectedPatterns[flyType]) || list[0];
+}
+function setPattern(flyType, patternId) {
+  if (!FLY_PATTERNS[flyType]) return;
+  const found = FLY_PATTERNS[flyType].find(p => p.id === patternId);
+  if (!found) return;
+  selectedPatterns[flyType] = patternId;
+  try { localStorage.setItem('bassLake.patterns', JSON.stringify(selectedPatterns)); } catch {}
+}
+
+// ----------------------------------------------------------------------------
 // HATCHES — periodic bug emergence events. While a hatch is active, fish
 // key on the matching fly so the player who reads the water and picks the
 // right fly gets a big bonus. Surface rise rings visualize the hatch.
@@ -1092,30 +1140,40 @@ function updateSonar() {
 function populateFlyBox() {
   let grid = document.getElementById('flybox-grid');
   if (!grid) return;
-  let order = ['fly', 'nymph', 'woolyBugger'];
-  let hotkeys = { fly: '1', nymph: '2', woolyBugger: '3' };
-  // Show what each fly catches in the *current* level
-  let catches = lvl().catches || {};
-  grid.innerHTML = order.map(t => {
-    let cfg = FLY_CONFIG[t];
-    let unlocked = playerState.unlocks.flies[t];
-    let active = selectedFly === t;
-    let cls = 'flybox-slot' + (active ? ' active' : '') + (!unlocked ? ' locked' : '');
-    let targets = (catches[t] || []).map(s => s.replace(/([A-Z])/g, ' $1').toLowerCase().trim()).join(' · ');
-    let img = flyIcons[t] ? `<img src="${flyIcons[t]}" alt="${cfg.label}">` : '';
-    return `<div class="${cls}" data-fly="${t}">
-      ${img}
-      <div class="name">${cfg.label}${unlocked ? '' : ' 🔒'}</div>
-      <div class="targets">${unlocked ? (targets || '—') : 'Locked'}</div>
-      <div class="hotkey">[${hotkeys[t]}]</div>
-    </div>`;
-  }).join('');
-  grid.querySelectorAll('.flybox-slot').forEach(el => {
+  const order = ['fly', 'nymph', 'woolyBugger'];
+  const hotkeys = { fly: '1', nymph: '2', woolyBugger: '3' };
+  const catLabel = { fly: 'Dry Flies', nymph: 'Nymphs', woolyBugger: 'Streamers' };
+  let html = '';
+  for (const cat of order) {
+    const unlocked = playerState.unlocks.flies[cat];
+    const patterns = FLY_PATTERNS[cat] || [];
+    html += `<div class="flybox-section">
+      <div class="flybox-section-title">${catLabel[cat]} <span class="flybox-hotkey">[${hotkeys[cat]}]</span>${unlocked ? '' : ' 🔒'}</div>
+      <div class="flybox-row">`;
+    for (const p of patterns) {
+      const active = selectedFly === cat && selectedPatterns[cat] === p.id;
+      const matchesHatch = currentHatch && p.hatches && p.hatches.includes(currentHatch.id);
+      const cls = 'flybox-pat' + (active ? ' active' : '') + (!unlocked ? ' locked' : '') + (matchesHatch ? ' hatch' : '');
+      const img = flyIcons[p.id] ? `<img src="${flyIcons[p.id]}" alt="${p.label}">` : '';
+      const hatchTag = matchesHatch ? `<span class="flybox-hatch-tag">★ matches</span>` : '';
+      html += `<div class="${cls}" data-cat="${cat}" data-pat="${p.id}" title="${escapeHtmlGlobal(p.desc || '')}">
+        ${img}
+        <div class="pat-name">${escapeHtmlGlobal(p.label)}</div>
+        <div class="pat-desc">${escapeHtmlGlobal(p.desc || '')}</div>
+        ${hatchTag}
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('.flybox-pat').forEach(el => {
     el.addEventListener('click', () => {
-      let t = el.dataset.fly;
-      if (!playerState.unlocks.flies[t]) return;
-      trySelectFly(t);
-      populateFlyBox();           // refresh active highlight
+      const cat = el.dataset.cat;
+      const pat = el.dataset.pat;
+      if (!playerState.unlocks.flies[cat]) return;
+      trySelectFly(cat);
+      setPattern(cat, pat);
+      populateFlyBox();
       closeFlyBox();
     });
   });
@@ -1283,14 +1341,237 @@ function populateShop() {
 }
 
 function buildFlyIcons() {
-  // Real pixel-art assets — see /images/. The HTML <img> tags below take
-  // these straight as src URLs. (The old procedural drawFlyArt() canvas
-  // generator is kept just below for reference / fallback.)
-  flyIcons = {
-    fly:         'images/adams-dry-fly.png',
-    nymph:       'images/prince-nymph.png',
-    woolyBugger: 'images/woolly-bugger.png',
-  };
+  // Map pattern.id -> img src (or dataURL from procedural draw).
+  flyIcons = {};
+  for (const cat of Object.keys(FLY_PATTERNS)) {
+    for (const p of FLY_PATTERNS[cat]) {
+      if (p.img) {
+        flyIcons[p.id] = p.img;
+      } else {
+        // Procedural — bake a 120x80 dataURL once per pattern at load
+        const g = createGraphics(120, 80);
+        g.pixelDensity(2);
+        g.clear();
+        drawFlyPattern(g, p.id, 60, 40);
+        flyIcons[p.id] = g.canvas.toDataURL('image/png');
+      }
+    }
+  }
+}
+
+// Procedural fly pattern variants. Falls back to drawFlyArt() for the
+// generic category look, then overlays pattern-specific touches.
+function drawFlyPattern(g, patternId, x, y) {
+  // Defaults — body color, wing color, accent. Tweaked per pattern below.
+  let bodyCol = [120, 95, 60], wingCol = [225, 220, 200], accentCol = [60, 45, 25];
+
+  if (patternId === 'elkHairCaddis') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // Tan dubbed body
+    g.fill(180, 140, 90); g.ellipse(-2, 0, 30, 10);
+    // Brown palmered hackle
+    g.stroke(110, 80, 45, 220); g.strokeWeight(0.8);
+    for (let i = -16; i < 10; i += 3) g.line(i, -5, i, 5);
+    g.noStroke();
+    // Elk hair wing — tent shape, lighter tan
+    g.fill(215, 185, 130);
+    g.triangle(-12, -3, 8, -3, -2, -16);
+    g.fill(170, 145, 100, 230);
+    g.triangle(-12, -3, 8, -3, -3, -12);
+    g.fill(60, 45, 25);
+    g.ellipse(8, -2, 5, 5);
+    g.pop();
+    return;
+  }
+  if (patternId === 'griffithsGnat') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.4); g.noFill();
+    g.bezier(20, -2, 18, 10, 8, 13, 0, 10);
+    // Peacock body
+    g.noStroke();
+    g.fill(45, 70, 50); g.ellipse(-2, 0, 22, 7);
+    // Grizzly hackle (alternating dark/light radial)
+    g.stroke(80, 70, 55, 230);
+    for (let a = 0; a < TWO_PI; a += PI / 10) g.line(-2, 0, -2 + Math.cos(a) * 12, Math.sin(a) * 12);
+    g.stroke(225, 215, 195, 200);
+    for (let a = PI / 20; a < TWO_PI; a += PI / 10) g.line(-2, 0, -2 + Math.cos(a) * 12, Math.sin(a) * 12);
+    g.pop();
+    return;
+  }
+  if (patternId === 'parachuteAdams') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // Grey muskrat body
+    g.fill(120, 115, 105); g.ellipse(-2, -1, 30, 9);
+    // Single tall white post
+    g.fill(245, 245, 240); g.rect(-2, -22, 3, 18, 1);
+    // Horizontal grizzly hackle wrapped around post
+    g.stroke(80, 70, 55, 220); g.strokeWeight(0.8);
+    for (let i = 0; i < 14; i++) {
+      const a = i / 14 * TWO_PI;
+      g.line(-2, -4, -2 + Math.cos(a) * 14, -4 + Math.sin(a) * 5);
+    }
+    g.pop();
+    return;
+  }
+  if (patternId === 'pheasantTail') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // Reddish-brown body
+    g.fill(110, 65, 35); g.ellipse(-4, 0, 32, 10);
+    // Copper rib
+    g.stroke(180, 110, 50, 220); g.strokeWeight(0.7);
+    for (let i = -18; i < 4; i += 2.5) g.line(i, -5, i + 1, 5);
+    g.noStroke();
+    // Tail fibers
+    g.stroke(100, 60, 30); g.strokeWeight(0.7);
+    g.line(-19, -2, -25, -4); g.line(-19, -1, -26, -1); g.line(-19, 0, -25, 3);
+    g.noStroke();
+    // Gold bead head
+    g.fill(220, 175, 70); g.ellipse(11, -1, 10, 10);
+    g.fill(140, 100, 35, 180); g.arc(11, -1, 10, 10, PI/2, 3*PI/2);
+    g.pop();
+    return;
+  }
+  if (patternId === 'haresEar') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // Buggy grey-brown body with spiky guard hairs
+    g.fill(135, 115, 85); g.ellipse(-4, 0, 32, 11);
+    g.stroke(70, 55, 35, 200); g.strokeWeight(0.7);
+    for (let i = -18; i < 4; i += 2) {
+      const dy = (Math.sin(i) + 1) * 5;
+      g.line(i, -3 - dy, i, 3 + dy);
+    }
+    g.noStroke();
+    // Gold bead head
+    g.fill(220, 175, 70); g.ellipse(11, -1, 10, 10);
+    g.fill(140, 100, 35, 180); g.arc(11, -1, 10, 10, PI/2, 3*PI/2);
+    g.pop();
+    return;
+  }
+  if (patternId === 'zebraMidge') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.3); g.noFill();
+    g.bezier(20, -2, 18, 10, 8, 13, 0, 10);
+    g.noStroke();
+    // Black slim body
+    g.fill(20, 20, 25); g.ellipse(-2, 0, 22, 6);
+    // Silver wire ribs
+    g.stroke(200, 210, 220); g.strokeWeight(0.6);
+    for (let i = -12; i < 6; i += 2) g.line(i, -3, i + 1, 3);
+    g.noStroke();
+    // Silver bead head
+    g.fill(220, 220, 230); g.ellipse(7, -1, 7, 7);
+    g.fill(150, 155, 165, 160); g.arc(7, -1, 7, 7, PI/2, 3*PI/2);
+    g.pop();
+    return;
+  }
+  if (patternId === 'damselNymph') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.4); g.noFill();
+    g.bezier(28, -2, 26, 12, 14, 16, 4, 12);
+    g.noStroke();
+    // Slim olive body
+    g.fill(80, 110, 60); g.ellipse(-4, 0, 36, 7);
+    // Marabou tail (three feathery fibers)
+    g.stroke(70, 100, 55, 220); g.strokeWeight(0.8);
+    g.line(-21, -2, -32, -5); g.line(-22, 0, -34, 0); g.line(-21, 2, -32, 5);
+    g.noStroke();
+    // Bead-chain eyes
+    g.fill(40, 40, 50); g.ellipse(11, -3, 5, 5); g.ellipse(11, 3, 5, 5);
+    g.fill(220, 220, 230); g.ellipse(11, -3, 2, 2); g.ellipse(11, 3, 2, 2);
+    g.pop();
+    return;
+  }
+  if (patternId === 'stoneflyNymph') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(32, -3, 30, 14, 14, 20, 4, 14);
+    g.noStroke();
+    // Big dark brown segmented body
+    g.fill(70, 50, 30); g.ellipse(-6, 0, 36, 13);
+    g.fill(45, 30, 18, 220);
+    for (let i = -22; i < 6; i += 4) g.rect(i, -7, 2, 13);
+    // Wing case (darker pad on thorax)
+    g.fill(35, 25, 15); g.ellipse(2, -1, 14, 8);
+    // Rubber legs (4 splayed)
+    g.stroke(180, 140, 90, 220); g.strokeWeight(1.4);
+    g.line(0, 5, -12, 14); g.line(0, -5, -12, -14);
+    g.line(4, 5, 14, 12); g.line(4, -5, 14, -12);
+    g.noStroke();
+    // Brass bead head
+    g.fill(200, 160, 60); g.ellipse(13, -1, 11, 11);
+    g.fill(120, 90, 30, 180); g.arc(13, -1, 11, 11, PI/2, 3*PI/2);
+    g.pop();
+    return;
+  }
+  if (patternId === 'clouserMinnow') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // White belly (long)
+    g.fill(240, 240, 235); g.ellipse(-6, 4, 40, 8);
+    // Chartreuse back
+    g.fill(170, 200, 70); g.ellipse(-6, -2, 40, 6);
+    // Dark lateral line of bucktail
+    g.stroke(70, 60, 40, 200); g.strokeWeight(0.6);
+    for (let i = 0; i < 20; i++) g.line(-24 + i * 2.5, 0, -22 + i * 2.5, 1);
+    g.noStroke();
+    // Dumbbell eyes
+    g.fill(40, 40, 50); g.ellipse(6, 3, 6, 6); g.ellipse(6, -3, 6, 6);
+    g.fill(220, 220, 230); g.ellipse(6, 3, 2.5, 2.5); g.ellipse(6, -3, 2.5, 2.5);
+    g.pop();
+    return;
+  }
+  if (patternId === 'muddlerMinnow') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(28, -2, 26, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // Tan body with mottled wing
+    g.fill(140, 110, 70); g.ellipse(-6, 0, 30, 9);
+    // Mottled brown wing case
+    g.fill(95, 70, 40); g.ellipse(-4, -3, 24, 7);
+    // Spun deer-hair head (large, rounded)
+    g.fill(195, 165, 110); g.ellipse(10, 0, 18, 14);
+    g.fill(130, 95, 55, 200);
+    for (let a = 0; a < TWO_PI; a += PI / 8) g.ellipse(10 + Math.cos(a)*6, Math.sin(a)*5, 2.4, 2.4);
+    g.pop();
+    return;
+  }
+  if (patternId === 'zonker') {
+    g.push(); g.translate(x, y);
+    g.stroke(70, 60, 50); g.strokeWeight(1.6); g.noFill();
+    g.bezier(30, -2, 28, 14, 14, 18, 4, 14);
+    g.noStroke();
+    // Silver mylar body
+    g.fill(210, 220, 230); g.ellipse(-4, 0, 34, 9);
+    g.fill(140, 155, 170, 180); g.ellipse(-4, 2, 34, 5);
+    // Rabbit-fur strip (dark + wavy)
+    g.fill(40, 35, 30); g.rect(-22, -7, 32, 4, 1);
+    g.fill(70, 60, 50, 200);
+    for (let i = -22; i < 10; i += 3) g.ellipse(i, -7, 4, 6);
+    // Gold bead
+    g.fill(220, 175, 70); g.ellipse(13, -1, 10, 10);
+    g.fill(140, 100, 35, 180); g.arc(13, -1, 10, 10, PI/2, 3*PI/2);
+    g.pop();
+    return;
+  }
+  // Fallback — use the category default
+  const cat = patternId.endsWith('Nymph') ? 'nymph' :
+              patternId.toLowerCase().includes('bugger') ? 'woolyBugger' : 'fly';
+  drawFlyArt(g, cat, x, y);
 }
 
 function drawFlyArt(g, type, x, y) {
@@ -1841,8 +2122,10 @@ function draw() {
     let moneyEl = document.getElementById('hud-money');
     let catchEl = document.getElementById('hud-catch');
     if (flyEl) {
-      let icon = flyIcons[selectedFly] ? `<img src="${flyIcons[selectedFly]}" alt="">` : '';
-      flyEl.innerHTML = `${icon}<span>${FLY_CONFIG[selectedFly].label}</span><span class="fly-hint">F</span>`;
+      const p = activePattern(selectedFly);
+      const icon = (p && flyIcons[p.id]) ? `<img src="${flyIcons[p.id]}" alt="">` : '';
+      const label = p ? p.label : FLY_CONFIG[selectedFly].label;
+      flyEl.innerHTML = `${icon}<span>${escapeHtmlGlobal(label)}</span><span class="fly-hint">F</span>`;
     }
     if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
     if (catchEl) {
@@ -4030,6 +4313,7 @@ class Eagle {
 class FlyCast {
   constructor() {
     this.flyType = selectedFly;            // capture player's choice at cast time
+    this.pattern = activePattern(selectedFly);   // specific pattern at cast time
     this.cfg = FLY_CONFIG[this.flyType];
     this.state = 'aerial';
     // 'aerial' | 'delivering' | 'fishing' | 'hooked' | 'reeling' | 'done'
@@ -4370,12 +4654,23 @@ class FlyCast {
     // AND we're throwing the matching fly. Player has to find the rising
     // bugs and put the fly in the right water.
     let inHatch = false;
+    // Pattern that the cast was thrown with — checked against the hatch's
+    // matching patterns for an EXTRA bonus on top of the category match.
+    const castPattern = this.pattern || activePattern(this.flyType);
+    let patternMatch = false;
     if (currentHatch && currentHatch.fly === this.flyType) {
       const dx = this.flyX - currentHatch.x;
       const dy = this.flyY - currentHatch.y;
-      if (dx * dx + dy * dy <= currentHatch.r * currentHatch.r) inHatch = true;
+      if (dx * dx + dy * dy <= currentHatch.r * currentHatch.r) {
+        inHatch = true;
+        if (castPattern && castPattern.hatches && castPattern.hatches.includes(currentHatch.id)) {
+          patternMatch = true;
+        }
+      }
     }
-    const hatchBonus = inHatch ? currentHatch.bonusBiteRange : 0;
+    // Right category in the right water = base hatch bonus; SPECIFIC pattern
+    // match (e.g., Elk Hair Caddis during a Caddis Hatch) doubles it.
+    const hatchBonus = inHatch ? currentHatch.bonusBiteRange * (patternMatch ? 2 : 1) : 0;
     let bestD = cfg.biteRange + hatchBonus;
     let best = null;
     // What does THIS fly type catch in the current level? Build a quick lookup.

@@ -663,12 +663,16 @@
       background: linear-gradient(135deg, rgba(38, 28, 18, 0.97), rgba(22, 16, 10, 0.97));
       border: 2px solid rgba(220, 175, 90, 0.6);
       border-radius: 14px;
-      padding: 24px 32px 22px 32px;
-      max-width: 92vw;
+      padding: 20px 24px 18px 24px;
+      width: 720px; max-width: 94vw; max-height: 90vh;
+      overflow-y: auto;
       color: rgba(230, 215, 190, 0.95);
       font: 14px/1.4 -apple-system, system-ui, sans-serif;
       text-align: center;
       box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    @media (pointer: coarse), (max-width: 720px) {
+      #flybox .flybox-card { padding: 14px; width: calc(100vw - 16px); }
     }
     #flybox .flybox-banner {
       display: block;
@@ -688,49 +692,83 @@
       margin-bottom: 14px;
     }
     #flybox .flybox-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      display: flex; flex-direction: column;
       gap: 14px;
-      margin-bottom: 18px;
+      margin-bottom: 14px;
     }
-    #flybox .flybox-slot {
-      background: rgba(70, 50, 30, 0.45);
-      border: 1px solid rgba(220, 175, 90, 0.35);
+    #flybox .flybox-section {
+      background: rgba(50, 36, 22, 0.55);
+      border: 1px solid rgba(220, 175, 90, 0.30);
       border-radius: 10px;
-      padding: 12px 10px 10px 10px;
-      min-width: 140px;
-      cursor: pointer;
-      transition: background 0.15s ease-out, border-color 0.15s ease-out, transform 0.08s ease-out;
+      padding: 10px 12px 12px;
     }
-    #flybox .flybox-slot:hover { background: rgba(220, 175, 90, 0.15); transform: translateY(-1px); }
-    #flybox .flybox-slot.active {
-      background: rgba(220, 175, 90, 0.25);
+    #flybox .flybox-section-title {
+      color: rgba(255, 230, 150, 0.95);
+      font: 700 13px/1 -apple-system, system-ui, sans-serif;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      display: flex; gap: 8px; align-items: baseline;
+    }
+    #flybox .flybox-hotkey {
+      font: 600 11px 'SF Mono', Menlo, monospace;
+      color: rgba(255, 220, 130, 0.6);
+    }
+    #flybox .flybox-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    #flybox .flybox-pat {
+      background: rgba(70, 50, 30, 0.55);
+      border: 1px solid rgba(220, 175, 90, 0.30);
+      border-radius: 8px;
+      padding: 8px 6px 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s ease-out, border-color 0.15s ease-out, transform 0.08s ease-out;
+      position: relative;
+    }
+    #flybox .flybox-pat:hover { background: rgba(220, 175, 90, 0.15); transform: translateY(-1px); }
+    #flybox .flybox-pat.active {
+      background: rgba(220, 175, 90, 0.28);
       border-color: rgba(255, 220, 130, 0.95);
     }
-    #flybox .flybox-slot.locked { opacity: 0.45; cursor: not-allowed; }
-    #flybox .flybox-slot img {
+    #flybox .flybox-pat.locked { opacity: 0.4; cursor: not-allowed; }
+    /* Patterns that match the current hatch get a glow ring */
+    #flybox .flybox-pat.hatch {
+      border-color: rgba(255, 220, 130, 1);
+      box-shadow: 0 0 0 1px rgba(255, 220, 130, 0.55), 0 4px 14px rgba(255, 220, 130, 0.25);
+      animation: hatchGlow 1.5s ease-in-out infinite alternate;
+    }
+    @keyframes hatchGlow {
+      from { box-shadow: 0 0 0 1px rgba(255, 220, 130, 0.35), 0 0 0 rgba(255, 220, 130, 0); }
+      to   { box-shadow: 0 0 0 1px rgba(255, 220, 130, 0.75), 0 4px 18px rgba(255, 220, 130, 0.4); }
+    }
+    #flybox .flybox-hatch-tag {
+      position: absolute; top: 4px; right: 4px;
+      background: rgba(255, 220, 130, 0.95);
+      color: rgba(30, 25, 12, 0.95);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font: 700 9px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px;
+    }
+    #flybox .flybox-pat img {
       display: block;
-      margin: 0 auto 8px auto;
-      width: 110px;
+      margin: 0 auto 4px auto;
+      width: 70px;
       height: auto;
       image-rendering: pixelated;
     }
-    #flybox .flybox-slot .name {
+    #flybox .flybox-pat .pat-name {
       color: rgba(255, 230, 150, 0.95);
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      margin-bottom: 3px;
+      font: 600 12px/1.2 -apple-system, system-ui, sans-serif;
+      margin-bottom: 2px;
     }
-    #flybox .flybox-slot .targets {
-      color: rgba(200, 215, 220, 0.78);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    #flybox .flybox-slot .hotkey {
-      margin-top: 6px;
-      font: 600 10px 'SF Mono', Menlo, monospace;
-      color: rgba(255, 220, 130, 0.6);
+    #flybox .flybox-pat .pat-desc {
+      color: rgba(200, 215, 220, 0.7);
+      font-size: 10px; line-height: 1.25;
     }
     #flybox #flybox-close {
       width: 100%;
@@ -2001,8 +2039,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=33"></script>
-  <script src="sprites.js?v=33"></script>
-  <script src="sketch.js?v=33"></script>
+  <script src="multiplayer.js?v=34"></script>
+  <script src="sprites.js?v=34"></script>
+  <script src="sketch.js?v=34"></script>
 </body>
 </html>
