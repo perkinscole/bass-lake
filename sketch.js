@@ -12,7 +12,8 @@ let logs = [];
 let cattails = [];
 let rocks = [];
 let snags = [];      // sunken tree stumps with bits poking above water
-let peaks = [];      // snow-capped mountain peaks (alpine only)
+let topoFeatures = [];  // topographic contour-ring features (alpine)
+let terrainBlobs = [];  // large soft color blobs for varied ground
 let ducks = [];                       // surface birds, drift around the lake
 let eagle = null;                     // active bald eagle, null when none
 let eagleSpawnCooldown = 1200;        // frames until next eagle attempt
@@ -126,6 +127,16 @@ const LEVELS = {
       'images/cast-water-2.png',
     ],
     bgImg:   'images/bass-lake-bg.png',
+    // Soft color blobs scattered through the forest zone for variety.
+    // Subtle on bass lake — just meadow shadow + bare-earth patches.
+    terrainBlobs: {
+      count: 140,
+      types: [
+        { c: [60, 78, 35],  a: 110, range: [50, 130] }, // shaded grass
+        { c: [110, 95, 50], a:  85, range: [40, 95]  }, // bare earth
+        { c: [55, 75, 30],  a: 100, range: [70, 160] }, // meadow
+      ],
+    },
     palette: {
       forest:    [80, 95, 45],     // warm yellow-green meadow
       forestSpeck: [60, 80, 40],
@@ -174,6 +185,24 @@ const LEVELS = {
       'images/cast-water-2.png',
     ],
     bgImg:   'images/alpine-lake-bg.png',
+    // Mixed terrain blobs — snow patches AND bare rock AND meadow AND
+    // dry earth, so the alpine ground reads like real high-country
+    // (some snowy, some green, some rocky) instead of all one tone.
+    terrainBlobs: {
+      count: 260,
+      types: [
+        { c: [240, 245, 250], a: 200, range: [40, 110] }, // snow patches
+        { c: [60, 70, 85],    a: 150, range: [40, 100] }, // dark wet rock
+        { c: [110, 130, 90],  a: 160, range: [60, 150] }, // alpine meadow
+        { c: [165, 150, 115], a: 130, range: [40, 100] }, // dry earth / scree
+        { c: [75, 95, 65],    a: 130, range: [50, 130] }, // dark conifer shadow
+      ],
+    },
+    // Topographic features — instead of cartoonish pyramid peaks, draw
+    // concentric contour rings centered on each feature, with elevation
+    // shading (green at the base -> brown -> grey -> snow at the top).
+    // Reads like an overhead topo map.
+    topoFeatures: { count: 22, sizeRange: [80, 200] },
     palette: {
       forest:    [232, 236, 242],     // bright snow with bluish cast
       forestSpeck: [140, 148, 158],   // grey rock specks (snow-dusted boulders)
@@ -203,7 +232,9 @@ const LEVELS = {
     },
     // Alpine: sparse pines, lots of exposed rock, snowcapped peaks scattered
     // across the surrounding terrain. No lilies/cattails.
-    propCounts: { lilypads: 0, weeds: 70, cattails: 0, trees: 140, logs: 14, rocks: 420, snags: 18, peaks: 26 },
+    // No more cartoonish pyramid `peaks` — topoFeatures (above) handles
+    // the high-country look using contour rings.
+    propCounts: { lilypads: 0, weeds: 70, cattails: 0, trees: 130, logs: 14, rocks: 380, snags: 18 },
     unlocked: false,
     unlockCost: 150,
   },
@@ -536,7 +567,8 @@ function buildWorld(seed) {
 
   // wipe any world that was here before so rebuilds are clean
   panfish = []; bass = []; lilypads = []; weeds = []; trees = [];
-  logs = []; cattails = []; rocks = []; snags = []; peaks = []; ducks = [];
+  logs = []; cattails = []; rocks = []; snags = []; ducks = [];
+  topoFeatures = []; terrainBlobs = [];
   ripples = []; bubbles = []; eagle = null;
 
   lake = new Lake(WORLD_W, WORLD_H);
@@ -599,17 +631,42 @@ function buildWorld(seed) {
     });
   }
 
-  // Mountain peaks — only spawn if the level configures `peaks`. Placed
-  // in the forest zone WELL outside the lake so they read as distant peaks
-  // surrounding the basin. Alpine lake uses them for high-country topography.
-  for (let i = 0; i < (counts.peaks || 0); i++) {
-    let p = randomShorePoint(random(180, 700));
-    peaks.push({
-      x: p.x, y: p.y,
-      r: random(45, 110),       // chunky enough to read as a mountain
-      lean: random(-0.18, 0.18),
-      seed: random(1000),
-    });
+  // Topographic features (alpine) — concentric contour rings centered on
+  // each feature, drawn like an overhead topo map. Each feature is the
+  // center of a "high spot" with elevation shading from green/meadow at
+  // the outer rings to grey rock and snow on the inner rings.
+  if (lvl().topoFeatures) {
+    const tf = lvl().topoFeatures;
+    for (let i = 0; i < tf.count; i++) {
+      let p = randomShorePoint(random(120, 800));
+      topoFeatures.push({
+        x: p.x, y: p.y,
+        r: random(tf.sizeRange[0], tf.sizeRange[1]),
+        seed: random(1000),
+        // each feature uses a noise field for irregular ring shapes
+        wobbleSeed: random(100),
+      });
+    }
+  }
+
+  // Terrain blobs — large soft color patches across the forest zone for
+  // varied ground (snow / rock / meadow / earth mixed together). Driven
+  // by the level's terrainBlobs config.
+  if (lvl().terrainBlobs) {
+    const cfg = lvl().terrainBlobs;
+    const types = cfg.types;
+    for (let i = 0; i < cfg.count; i++) {
+      const p = randomShorePoint(random(40, 700));
+      const t = types[Math.floor(Math.random() * types.length)];
+      terrainBlobs.push({
+        x: p.x, y: p.y,
+        r: random(t.range[0], t.range[1]),
+        c: t.c, a: t.a,
+        // each blob slightly oval/rotated for organic look
+        ar: random(0.6, 1.2),
+        rot: random(TWO_PI),
+      });
+    }
   }
 
   // Snags — sunken stumps with a stub poking above the surface. Predator-
@@ -1330,6 +1387,28 @@ function buildStaticImage() {
   // actually look different.
   const pal = lvl().palette;
   g.background(pal.forest[0], pal.forest[1], pal.forest[2]);
+
+  // Terrain blobs — large soft color patches that break up the flat
+  // forest base into a varied landscape (rock / snow / meadow / earth).
+  for (let b of terrainBlobs) {
+    g.push();
+    g.translate(b.x, b.y);
+    g.rotate(b.rot);
+    g.fill(b.c[0], b.c[1], b.c[2], b.a);
+    g.ellipse(0, 0, b.r * 2, b.r * 2 * b.ar);
+    g.pop();
+  }
+
+  // Topographic contour features (alpine high country). Each feature is
+  // a nested set of irregular rings with elevation-based shading:
+  //   outer = green meadow → mid = brown rock → inner = snow/white.
+  // A thin contour line is drawn over every other ring like a topo map.
+  for (let f of topoFeatures) {
+    drawTopoFeature(g, f);
+  }
+
+  // Dirt + sand specks finally on top so the texture survives the
+  // overlay layers.
   for (let s of lake.dirtSpecks) {
     g.fill(s.c[0], s.c[1], s.c[2], 180);
     g.ellipse(s.x, s.y, s.r);
@@ -1337,64 +1416,6 @@ function buildStaticImage() {
   for (let s of lake.sandSpecks) {
     g.fill(pal.sand[0], pal.sand[1], pal.sand[2], 140);
     g.ellipse(s.x, s.y, s.r);
-  }
-
-  // Mountain peaks (alpine only) — large snow-capped pyramid shapes that
-  // make the surrounding terrain read as high-country topography from
-  // above. Baked under the trees so trees sit on the foothills.
-  for (let p of peaks) {
-    // soft drop shadow
-    g.fill(0, 0, 0, 70);
-    g.ellipse(p.x + 6, p.y + 10, p.r * 2.2, p.r * 0.9);
-
-    // dark rock base (an irregular pyramid silhouette)
-    g.push();
-    g.translate(p.x, p.y);
-    g.rotate(p.lean);
-    g.fill(70, 78, 90);
-    g.beginShape();
-    g.vertex(-p.r,        p.r * 0.65);
-    g.vertex(-p.r * 0.55, p.r * 0.05);
-    g.vertex(-p.r * 0.25, -p.r * 0.55);
-    g.vertex(0,           -p.r);
-    g.vertex( p.r * 0.30, -p.r * 0.55);
-    g.vertex( p.r * 0.70, -p.r * 0.10);
-    g.vertex( p.r,         p.r * 0.65);
-    g.endShape(g.CLOSE);
-
-    // lit face — lighter rock on the upper-left
-    g.fill(120, 128, 140);
-    g.beginShape();
-    g.vertex(-p.r * 0.55, p.r * 0.05);
-    g.vertex(-p.r * 0.25, -p.r * 0.55);
-    g.vertex(0,           -p.r);
-    g.vertex(0,           -p.r * 0.10);
-    g.vertex(-p.r * 0.25, p.r * 0.05);
-    g.endShape(g.CLOSE);
-
-    // snow cap — bright white triangular field near the apex
-    g.fill(245, 248, 252);
-    g.beginShape();
-    g.vertex(-p.r * 0.45, -p.r * 0.30);
-    g.vertex(-p.r * 0.18, -p.r * 0.65);
-    g.vertex(0,           -p.r);
-    g.vertex( p.r * 0.22, -p.r * 0.62);
-    g.vertex( p.r * 0.40, -p.r * 0.25);
-    // dripping fingers down the rock face
-    g.vertex( p.r * 0.25, -p.r * 0.05);
-    g.vertex( p.r * 0.10, -p.r * 0.20);
-    g.vertex(-p.r * 0.10, -p.r * 0.05);
-    g.vertex(-p.r * 0.30, -p.r * 0.25);
-    g.endShape(g.CLOSE);
-
-    // crisp white highlight on the very tip
-    g.fill(255, 255, 255);
-    g.beginShape();
-    g.vertex(-p.r * 0.10, -p.r * 0.70);
-    g.vertex(0,           -p.r);
-    g.vertex( p.r * 0.12, -p.r * 0.70);
-    g.endShape(g.CLOSE);
-    g.pop();
   }
 
   // trees: trunks then canopies. Pines get a spiky, conical top-down look.
@@ -4665,6 +4686,65 @@ function drawRock(r) {
   ellipse(r.x, r.y, r.r * 2, r.r * 1.4);
   fill(r.shade + 30, r.shade + 30, r.shade + 30, 200);
   ellipse(r.x - r.r * 0.2, r.y - r.r * 0.25, r.r * 0.7, r.r * 0.4);
+}
+
+// Topographic feature — nested irregular contour rings, the way a high
+// spot looks on an overhead topo map. Outer rings are meadow green, mid
+// rings are brown/grey rock, inner rings are snow/white. Thin contour
+// lines drawn over every other band complete the map look.
+function drawTopoFeature(g, p) {
+  const numRings = Math.max(4, Math.floor(p.r / 14));
+  // Pre-compute an irregular outline per ring so the closed shapes nest
+  // naturally without intersecting weirdly.
+  const STEPS = 36;
+  for (let i = 0; i < numRings; i++) {
+    const t = (i + 0.5) / numRings;          // 0 = outer (low), 1 = inner (high)
+    const rr = p.r * (1 - t * 0.93);
+    let r, gg, b, a;
+    if (t < 0.30) {
+      // outer: alpine meadow green
+      const k = t / 0.30;
+      r = 95  + k * 18;  gg = 120 + k * 8;  b = 75 + k * 18; a = 140;
+    } else if (t < 0.65) {
+      // mid: rock / earth band
+      const k = (t - 0.30) / 0.35;
+      r = 130 + k * 35; gg = 125 + k * 28; b = 100 + k * 28; a = 165;
+    } else if (t < 0.88) {
+      // upper rock: light grey
+      const k = (t - 0.65) / 0.23;
+      r = 175 + k * 50; gg = 178 + k * 50; b = 175 + k * 55; a = 185;
+    } else {
+      // inner: snow
+      r = 240; gg = 245; b = 250; a = 220;
+    }
+    g.fill(r, gg, b, a);
+    g.beginShape();
+    for (let s = 0; s <= STEPS; s++) {
+      const a2 = (s / STEPS) * TWO_PI;
+      const n  = noise(p.wobbleSeed + i * 0.7 + Math.cos(a2) * 1.4, Math.sin(a2) * 1.4);
+      const rad = rr * (0.86 + n * 0.30);
+      g.vertex(p.x + Math.cos(a2) * rad, p.y + Math.sin(a2) * rad);
+    }
+    g.endShape(g.CLOSE);
+  }
+  // Thin contour lines on every other ring — the unmistakable topo-map
+  // look. Slightly darker than the band color.
+  g.noFill();
+  g.stroke(55, 60, 50, 130);
+  g.strokeWeight(0.9);
+  for (let i = 0; i < numRings; i += 2) {
+    const t = (i + 0.5) / numRings;
+    const rr = p.r * (1 - t * 0.93);
+    g.beginShape();
+    for (let s = 0; s <= STEPS; s++) {
+      const a2 = (s / STEPS) * TWO_PI;
+      const n  = noise(p.wobbleSeed + i * 0.7 + Math.cos(a2) * 1.4, Math.sin(a2) * 1.4);
+      const rad = rr * (0.86 + n * 0.30);
+      g.vertex(p.x + Math.cos(a2) * rad, p.y + Math.sin(a2) * rad);
+    }
+    g.endShape(g.CLOSE);
+  }
+  g.noStroke();
 }
 
 // Snag — sunken stump with a chewed-off stub poking above the surface.
