@@ -5964,9 +5964,77 @@ const FIELD_GUIDE_SCIENCE = [
   },
 ];
 
+// Common fly-fishing insects. Each entry mentions a real-world pattern
+// that imitates it (Adams, Elk Hair Caddis, etc.) and which in-game fly
+// is closest. Lakes field describes the habitat instead of a specific
+// lake since most insects live across both.
+const FIELD_GUIDE_INSECTS = [
+  {
+    id: 'mayfly', name: 'Mayfly', latin: 'Order Ephemeroptera',
+    icon: '🪶', size: '3–15 mm body', lakes: 'Both lakes · stream inlets',
+    fact: 'The signature aquatic insect of fly fishing. Adults hold upright sail-like wings and trail two or three filament tails; many species live less than 24 hours as adults (hence "ephemeral"). Trout key on whichever life stage is most available — nymphs along the bottom, emergers in the surface film, duns drifting on top after hatching, and spinners after they mate and die. The Adams dry fly is the classic generic dun imitation.',
+    flies: ['Dry Fly', 'Nymph'],
+  },
+  {
+    id: 'caddisfly', name: 'Caddisfly', latin: 'Order Trichoptera',
+    icon: '🦋', size: '6–25 mm body', lakes: 'Both lakes · cold streams',
+    fact: 'Mothy-looking adults that hold their wings flat over the back like a tent. Larvae build protective cases of pebbles, sand, sticks, or leaves cemented together with silk — flip over a streambed rock and you\'ll find them clinging by the dozen. Pupae rise to the surface in evasive fluttering runs that trigger aggressive strikes. The Elk Hair Caddis is the iconic dry-fly imitation.',
+    flies: ['Dry Fly', 'Nymph'],
+  },
+  {
+    id: 'stonefly', name: 'Stonefly', latin: 'Order Plecoptera',
+    icon: '🪲', size: '10–50 mm body', lakes: 'Cold rocky rivers',
+    fact: 'Big, flat-bodied insects that NEED cold, well-oxygenated water — finding them means the stream is healthy. Nymphs live on the streambed for one to three years, then crawl ONTO rocks (not up through the surface) to molt into adults. Western salmonflies and golden stones are enormous trout food. Pat\'s Rubber Legs is the go-to nymph imitation.',
+    flies: ['Nymph'],
+  },
+  {
+    id: 'midge', name: 'Midge', latin: 'Family Chironomidae',
+    icon: '🦟', size: '1–10 mm body', lakes: 'Both lakes · year-round',
+    fact: 'Tiny non-biting mosquito relatives. Often the only food available in winter and very early spring. Larvae are red wormlike "bloodworms"; pupae rise toward the surface as a thread suspended just below the film, sometimes for hours. Tie them on tiny hooks — #18 to #24. Griffith\'s Gnat (dry) and Zebra Midge (nymph) are the standard patterns.',
+    flies: ['Dry Fly', 'Nymph'],
+  },
+  {
+    id: 'damselfly', name: 'Damselfly Nymph', latin: 'Suborder Zygoptera',
+    icon: '🪲', size: '15–40 mm long', lakes: 'Both lakes · weed edges',
+    fact: 'Slim predatory aquatic nymph with three leaf-shaped gills trailing from the tail. Stalks weed beds hunting mosquito larvae and smaller invertebrates. When ready to emerge it migrates toward the shoreline and crawls up an emergent stem to molt — that migration triggers a feeding frenzy among bass, bluegill, and trout alike.',
+    flies: ['Nymph'],
+  },
+  {
+    id: 'dragonfly', name: 'Dragonfly Nymph', latin: 'Suborder Anisoptera',
+    icon: '🪲', size: '25–50 mm long', lakes: 'Both lakes · silty bottoms',
+    fact: 'The damselfly\'s stocky, bulldog cousin. Hunts small fish and other insects on the bottom, then jets forward by squirting water from its abdomen. Dragonfly nymphs are the biggest single insect meal in many lakes — big trout, bass, and pike all key on them. The hatch is theatrical: nymphs crawl out on emergent plants and split open to release the adult.',
+    flies: ['Nymph', 'Wooly Bugger'],
+  },
+  {
+    id: 'hellgrammite', name: 'Hellgrammite', latin: 'Family Corydalidae',
+    icon: '🐛', size: '25–75 mm long', lakes: 'Cold rocky rivers',
+    fact: 'Fearsome aquatic larva of the dobsonfly. Lives two or three years under rocks in fast, cold rivers eating other insects and small fish. Looks like a centipede crossed with a worm — and bites hard if handled carelessly. Smallmouth bass dinner-bell; black streamers fished slowly along the bottom imitate them.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'scud', name: 'Scud', latin: 'Order Amphipoda',
+    icon: '🦐', size: '5–25 mm long', lakes: 'Both lakes · tailwaters',
+    fact: 'Not technically an insect — a tiny pale-orange or olive freshwater crustacean — but fly anglers lump them in. Look like miniature shrimp scuttling through weed mats. In stillwater and tailwaters where mayfly hatches are sparse, trout cruise feed on scuds non-stop. Pink and UV Scud patterns drifted slowly through weeds are deadly.',
+    flies: ['Nymph'],
+  },
+  {
+    id: 'terrestrial', name: 'Terrestrials', latin: 'Land insects',
+    icon: '🦗', size: '6–80 mm body', lakes: 'Summer · all waters',
+    fact: 'Grasshoppers, ants, beetles, crickets, and cicadas that fall in from overhanging grass or trees. Especially important in late summer when aquatic hatches taper off. Fish them tight to the bank where wind and gravity deliver them. The hopper-dropper rig — a foam grasshopper on the surface with a nymph dangling 18-24″ below — is one of the most productive summer setups for trout AND bass.',
+    flies: ['Dry Fly', 'Nymph'],
+  },
+  {
+    id: 'crayfish', name: 'Crayfish', latin: 'Family Cambaridae',
+    icon: '🦞', size: '25–150 mm', lakes: 'Both lakes · rocky bottoms',
+    fact: 'Lobster cousins that scuttle backwards along rocky bottoms in shallow water. Among the largest single food items in many warmwater lakes. Smallmouth bass adore them; pike and big brown trout eat them too. Olive and rust streamers fished slowly along the bottom — with the hook riding point-up to avoid snagging — imitate the natural retreat motion.',
+    flies: ['Wooly Bugger'],
+  },
+];
+
 // All categories — order here defines the tab order.
 const FIELD_GUIDE = {
   fish:    { label: 'Fish',        entries: FIELD_GUIDE_FISH },
+  insects: { label: 'Insects',     entries: FIELD_GUIDE_INSECTS },
   birds:   { label: 'Birds',       entries: FIELD_GUIDE_BIRDS },
   plants:  { label: 'Plants',      entries: FIELD_GUIDE_PLANTS },
   science: { label: 'Lake Science', entries: FIELD_GUIDE_SCIENCE },
