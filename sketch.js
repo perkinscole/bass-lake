@@ -69,7 +69,11 @@ const KAYAK_BASE_SPEED = 3.4;   // multiplied by kayak tier speed factor
 const FLY_CONFIG = {
   fly: {
     label: 'Dry Fly',
-    catches: { bluegill: true, pumpkinseed: true },
+    catches: {
+      bluegill: true, pumpkinseed: true,
+      greenSunfish: true, redbreastSunfish: true, spottedSunfish: true,
+      rainbowTrout: true,
+    },
     flyColor: [220, 200, 130],
     legsColor: [120, 100, 60],
     sinks: false,                  // floats high on the surface
@@ -79,7 +83,7 @@ const FLY_CONFIG = {
   },
   nymph: {
     label: 'Nymph',
-    catches: { crappie: true },
+    catches: { crappie: true, yellowPerch: true, brookTrout: true },
     flyColor: [120, 95, 60],
     legsColor: [70, 55, 35],
     sinks: true,                   // drifts a bit deeper
@@ -89,7 +93,10 @@ const FLY_CONFIG = {
   },
   woolyBugger: {
     label: 'Wooly Bugger',
-    catches: { bass: true },
+    catches: {
+      bass: true, smallmouthBass: true, chainPickerel: true, northernPike: true,
+      cutthroatTrout: true, brownTrout: true,
+    },
     flyColor: [40, 32, 28],
     legsColor: [25, 20, 18],
     sinks: true,
@@ -99,7 +106,7 @@ const FLY_CONFIG = {
   },
 };
 let selectedFly = 'fly';
-let catchCount = { bluegill: 0, pumpkinseed: 0, crappie: 0, bass: 0 };
+let catchCount = {};
 let lastCatchToast = null;        // { species, time } for brief on-screen popup
 let lastMissToast = null;         // { reason, time } when a fish escapes
 
@@ -124,14 +131,27 @@ const LEVELS = {
       bgClear:   [20, 30, 18],     // off-canvas backdrop
     },
     treeStyle: 'deciduous',
-    species:   ['bluegill', 'pumpkinseed', 'crappie', 'bass'],
+    species:   [
+      'bluegill', 'pumpkinseed', 'crappie',
+      'greenSunfish', 'redbreastSunfish', 'spottedSunfish',
+      'yellowPerch',
+      'bass', 'smallmouthBass', 'chainPickerel', 'northernPike',
+    ],
     catches: {
-      fly:         ['bluegill', 'pumpkinseed'],
-      nymph:       ['crappie'],
-      woolyBugger: ['bass'],
+      fly:         ['bluegill', 'pumpkinseed', 'greenSunfish', 'redbreastSunfish', 'spottedSunfish'],
+      nymph:       ['crappie', 'yellowPerch'],
+      woolyBugger: ['bass', 'smallmouthBass', 'chainPickerel', 'northernPike'],
     },
-    rewards: { bluegill: 5, pumpkinseed: 8, crappie: 15, bass: 40 },
-    spawn:   { bluegill: 100, pumpkinseed: 56, crappie: 67, bass: 22 },
+    rewards: {
+      bluegill: 5, pumpkinseed: 8, greenSunfish: 6, spottedSunfish: 7, redbreastSunfish: 9,
+      crappie: 15, yellowPerch: 12,
+      bass: 40, smallmouthBass: 35, chainPickerel: 60, northernPike: 100,
+    },
+    spawn: {
+      bluegill: 50, pumpkinseed: 30, greenSunfish: 25, redbreastSunfish: 20, spottedSunfish: 20,
+      crappie: 35, yellowPerch: 30,
+      bass: 16, smallmouthBass: 10, chainPickerel: 5, northernPike: 2,
+    },
     propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110 },
     unlocked: true,
     unlockCost: 0,
@@ -152,14 +172,20 @@ const LEVELS = {
       bgClear:   [25, 35, 45],
     },
     treeStyle: 'pine',
-    species:   ['rainbowTrout', 'brookTrout', 'cutthroatTrout'],
+    species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout', 'yellowPerch'],
     catches: {
       fly:         ['rainbowTrout'],
-      nymph:       ['brookTrout'],
-      woolyBugger: ['cutthroatTrout'],
+      nymph:       ['brookTrout', 'yellowPerch'],
+      woolyBugger: ['cutthroatTrout', 'brownTrout'],
     },
-    rewards: { rainbowTrout: 12, brookTrout: 18, cutthroatTrout: 30 },
-    spawn:   { rainbowTrout: 90, brookTrout: 60, cutthroatTrout: 6 },
+    rewards: {
+      rainbowTrout: 12, brookTrout: 18, brownTrout: 35, cutthroatTrout: 30,
+      yellowPerch: 12,
+    },
+    spawn: {
+      rainbowTrout: 40, brookTrout: 30, brownTrout: 15, cutthroatTrout: 6,
+      yellowPerch: 25,
+    },
     // alpine lakes are clearer and rockier — no lilies/cattails, more rocks
     propCounts: { lilypads: 0, weeds: 90, cattails: 0, trees: 300, logs: 18, rocks: 260 },
     unlocked: false,
@@ -652,6 +678,7 @@ function finishSetup() {
   });
   wireDerbyUI();
   wireProfileUI();
+  wireFieldGuide();
   let shopClose = document.getElementById('shop-close');
   if (shopClose) shopClose.addEventListener('click', () => {
     document.getElementById('shop').classList.add('hidden');
@@ -1162,10 +1189,24 @@ function buildSpeciesPortraits() {
   // External PNG portraits (place these files in /images/). The img tags load
   // them lazily; if a file is missing the toast falls back to no image.
   speciesPortraits = {
-    bluegill:    'images/bluegill-removebg-preview.png',
-    pumpkinseed: 'images/pumpkinseed-removebg-preview.png',
-    crappie:     'images/blackcrappie-removebg-preview.png',
-    bass:        'images/largemouth-removebg-preview.png',
+    // bass lake — original 4
+    bluegill:         'images/bluegill-removebg-preview.png',
+    pumpkinseed:      'images/pumpkinseed-removebg-preview.png',
+    crappie:          'images/blackcrappie-removebg-preview.png',
+    bass:             'images/largemouth-removebg-preview.png',
+    // bass lake — new sunfish + perch + predators
+    greenSunfish:     'images/green-sunfish.png',
+    redbreastSunfish: 'images/redbreast-sunfish.png',
+    spottedSunfish:   'images/spotted-sunfish.png',
+    yellowPerch:      'images/yellow-perch.png',
+    smallmouthBass:   'images/smallmouth-bass.png',
+    chainPickerel:    'images/chain-pickerel.png',
+    northernPike:     'images/northern-pike.png',
+    // alpine lake
+    rainbowTrout:     'images/rainbow-trout.png',
+    brookTrout:       'images/brook-trout.png',
+    brownTrout:       'images/brown-trout.png',
+    cutthroatTrout:   'images/cutthroat-trout.png',
   };
 }
 
@@ -1524,12 +1565,15 @@ function draw() {
     }
     if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
     if (catchEl) {
-      // Show only species relevant to the current level
-      let parts = lvl().species.map(sp => {
-        let nice = sp.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
-        return `${nice} ${catchCount[sp] || 0}`;
-      });
-      catchEl.textContent = `Caught — ${parts.join('  ·  ')}`;
+      // Compact: only species the player has actually caught (the lake now
+      // has 11 species; showing all of them with zeros makes the HUD too
+      // chatty). Falls back to a friendly nudge when nothing's caught yet.
+      let caught = lvl().species
+        .filter(sp => (catchCount[sp] || 0) > 0)
+        .map(sp => `${sp.replace(/([A-Z])/g, ' $1').toLowerCase().trim()} ${catchCount[sp]}`);
+      catchEl.textContent = caught.length
+        ? `Caught — ${caught.join('  ·  ')}`
+        : `Nothing landed yet — try a fly`;
     }
   }
   updateWind();
@@ -2349,6 +2393,92 @@ const SPECIES = {
     class: 'bass',
     spooky: true,
   },
+
+  // ---- BASS LAKE additions (Phase 7) ----
+  yellowPerch: {
+    class: 'panfish',
+    sizeRange: [7, 11],
+    bodyAspect: 0.45,
+    maxSpeed: 1.0, maxForce: 0.026,
+    sepR: 14, neighR: 60, fleeR: 100,
+    sepW: 1.5, aliW: 1.3, cohW: 1.4, fleeW: 2.6,
+    habitat: 'weeds', habitatW: 0.04,
+    depthBias: 0.0006,
+    schoolWith: 'yellowPerch',
+    depthAlpha: 220,
+    zRange: [0.30, 0.60],
+  },
+  greenSunfish: {
+    class: 'panfish',
+    sizeRange: [6, 9],
+    bodyAspect: 0.62,
+    maxSpeed: 0.95, maxForce: 0.024,
+    sepR: 16, neighR: 45, fleeR: 90,
+    sepW: 1.5, aliW: 0.8, cohW: 0.9, fleeW: 2.4,
+    habitat: 'weeds', habitatW: 0.05,
+    depthBias: -0.0002,
+    schoolWith: 'greenSunfish',
+    depthAlpha: 210,
+    zRange: [0.10, 0.35],
+  },
+  redbreastSunfish: {
+    class: 'panfish',
+    sizeRange: [8, 11],
+    bodyAspect: 0.60,
+    maxSpeed: 1.0, maxForce: 0.026,
+    sepR: 17, neighR: 50, fleeR: 95,
+    sepW: 1.5, aliW: 0.9, cohW: 1.0, fleeW: 2.5,
+    habitat: 'logs', habitatW: 0.04,
+    depthBias: 0,
+    schoolWith: 'redbreastSunfish',
+    depthAlpha: 215,
+    zRange: [0.10, 0.40],
+  },
+  spottedSunfish: {
+    class: 'panfish',
+    sizeRange: [6, 9],
+    bodyAspect: 0.64,
+    maxSpeed: 0.9, maxForce: 0.022,
+    sepR: 16, neighR: 42, fleeR: 90,
+    sepW: 1.5, aliW: 0.8, cohW: 0.9, fleeW: 2.3,
+    habitat: 'lilypads', habitatW: 0.05,
+    depthBias: 0,
+    schoolWith: 'spottedSunfish',
+    depthAlpha: 215,
+    zRange: [0.10, 0.35],
+  },
+  // Bass-class predators with custom size ranges (the Bass class reads
+  // sizeRange from cfg if present, falls back to [20, 28]).
+  smallmouthBass: {
+    class: 'bass',
+    sizeRange: [16, 22],
+  },
+  chainPickerel: {
+    class: 'bass',
+    sizeRange: [22, 30],     // long and lean
+    bodyAspect: 0.28,
+  },
+  northernPike: {
+    class: 'bass',
+    sizeRange: [28, 40],     // big apex predator
+    bodyAspect: 0.26,
+  },
+
+  // ---- ALPINE LAKE addition (Phase 7) ----
+  brownTrout: {
+    class: 'panfish',
+    spooky: true,
+    sizeRange: [12, 17],
+    bodyAspect: 0.40,
+    maxSpeed: 1.2, maxForce: 0.030,
+    sepR: 22, neighR: 30, fleeR: 130,    // adult browns are wary loners
+    sepW: 1.8, aliW: 0.4, cohW: 0.3, fleeW: 3.0,
+    habitat: 'logs', habitatW: 0.04,
+    depthBias: 0.0006,
+    schoolWith: null,                    // solitary
+    depthAlpha: 220,
+    zRange: [0.30, 0.70],
+  },
 };
 
 // ---------- PANFISH (boids) ----------
@@ -2670,7 +2800,13 @@ class Bass {
     this.pos = createVector(x, y);
     this.vel = createVector();
     this.acc = createVector();
-    this.size = random(20, 28);
+    this.species = species;
+    this.cfg = SPECIES[species] || {};
+    // Each bass-class species can supply its own size range — smallmouth
+    // are smaller, pike are huge.
+    const sr = this.cfg.sizeRange || [20, 28];
+    this.size = random(sr[0], sr[1]);
+    this.bodyAspect = this.cfg.bodyAspect || 0.36;
     this.dashSpeed = 7.0;
     this.state = 'lurk';
     this.target = null;
@@ -2838,16 +2974,18 @@ class Bass {
     let tailW = sin(this.wiggle) * (this.dashing ? 0.35 : 0.18);
     let baseA = 130 * surfaceVis;
 
+    // Body aspect: pike/pickerel are much more elongated than bass.
+    const aspect = this.bodyAspect || 0.36;
     noStroke();
     fill(0, 6, 14, baseA * 0.7);
-    ellipse(0, 0, s * 2.6, s * 1.0);
+    ellipse(0, 0, s * 2.6, s * 2.6 * aspect * 1.1);
     fill(0, 5, 12, baseA);
-    ellipse(0, 0, s * 2.0, s * 0.78);
+    ellipse(0, 0, s * 2.0, s * 2.0 * aspect);
     push();
     translate(-s * 0.85, 0);
     rotate(tailW);
     fill(0, 6, 14, baseA * 0.85);
-    triangle(0, 0, -s * 0.55, -s * 0.45, -s * 0.55, s * 0.45);
+    triangle(0, 0, -s * 0.55, -s * 0.55 * aspect * 1.3, -s * 0.55, s * 0.55 * aspect * 1.3);
     pop();
     pop();
   }
@@ -5245,6 +5383,183 @@ function drawProfilePreview() {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(s * 0.05, -s * 0.6); ctx.lineTo(s * 0.05, s * 0.6); ctx.stroke();
   ctx.restore();
+}
+
+// ============================================================================
+// Field Guide (Phase 7)
+// ----------------------------------------------------------------------------
+// Flip through every species with portrait + Latin name + factual blurb.
+// Sourced from real-world identification references; intentionally short so
+// the page stays readable on a phone.
+// ============================================================================
+
+const FIELD_GUIDE = [
+  {
+    id: 'bluegill', name: 'Bluegill', latin: 'Lepomis macrochirus',
+    size: '6–10 inches', lakes: 'Bass Lake',
+    fact: 'Easily told apart by the solid black "ear" flap on the gill cover and a copper-orange breast. Among the boldest panfish — readily strike small flies right at the surface. Spawn in saucer-shaped nests in dense colonies in late spring.',
+    flies: ['Dry Fly'],
+  },
+  {
+    id: 'pumpkinseed', name: 'Pumpkinseed', latin: 'Lepomis gibbosus',
+    size: '4–8 inches', lakes: 'Bass Lake',
+    fact: 'One of the most colorful North American fish: blue-green sides scrawled with orange flecks and a bright red spot on the tip of the gill flap. Surface feeders that haunt lily pads and weed edges.',
+    flies: ['Dry Fly'],
+  },
+  {
+    id: 'greenSunfish', name: 'Green Sunfish', latin: 'Lepomis cyanellus',
+    size: '4–7 inches', lakes: 'Bass Lake',
+    fact: 'Stockier and bigger-mouthed than other sunfish, with wavy turquoise lines along an olive-green body. Tolerates poor water quality and out-competes other panfish in disturbed habitat.',
+    flies: ['Dry Fly'],
+  },
+  {
+    id: 'redbreastSunfish', name: 'Redbreast Sunfish', latin: 'Lepomis auritus',
+    size: '5–9 inches', lakes: 'Bass Lake',
+    fact: 'Distinguished by a long, narrow black ear flap with a pale border and a vivid orange-red belly that flushes brighter during the spawn. Favors current-edge water near submerged wood.',
+    flies: ['Dry Fly'],
+  },
+  {
+    id: 'spottedSunfish', name: 'Spotted Sunfish', latin: 'Lepomis punctatus',
+    size: '4–7 inches', lakes: 'Bass Lake',
+    fact: 'Identified by rows of small reddish-orange spots along the sides over a brassy background. Common in slow southeastern streams and the dense vegetation of warmwater lakes.',
+    flies: ['Dry Fly'],
+  },
+  {
+    id: 'crappie', name: 'Black Crappie', latin: 'Pomoxis nigromaculatus',
+    size: '8–14 inches', lakes: 'Bass Lake',
+    fact: 'Silvery body randomly speckled with dark blotches and a tall arching dorsal fin. Schools tightly around submerged trees and logs, suspending in mid-water — drop a nymph slowly through them.',
+    flies: ['Nymph'],
+  },
+  {
+    id: 'yellowPerch', name: 'Yellow Perch', latin: 'Perca flavescens',
+    size: '6–12 inches', lakes: 'Bass Lake · Alpine Lake',
+    fact: 'Golden-yellow flanks with six to nine bold dark vertical bars and bright orange lower fins. Travels in tight schools through cool weedy water, equally at home in warm farm ponds and high mountain lakes.',
+    flies: ['Nymph'],
+  },
+  {
+    id: 'bass', name: 'Largemouth Bass', latin: 'Micropterus salmoides',
+    size: '12–22 inches', lakes: 'Bass Lake',
+    fact: 'The classic warmwater predator: dark olive-green back, broken horizontal band along the side, and a jaw that extends past the eye. Ambushes prey from cover — lay a wooly bugger near a log and strip it past.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'smallmouthBass', name: 'Smallmouth Bass', latin: 'Micropterus dolomieu',
+    size: '10–18 inches', lakes: 'Bass Lake',
+    fact: 'Bronze body with broken vertical bars and red-tinged eyes; jaw stops at mid-eye, hence "smallmouth." Prefers cooler, rockier water than its largemouth cousin and fights pound-for-pound harder than almost anything.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'chainPickerel', name: 'Chain Pickerel', latin: 'Esox niger',
+    size: '18–26 inches', lakes: 'Bass Lake',
+    fact: 'Olive flanks crossed by a striking dark chain-link pattern, with a duck-billed snout full of needle teeth. Solitary ambush hunter that lies motionless along weed edges, then strikes with explosive speed.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'northernPike', name: 'Northern Pike', latin: 'Esox lucius',
+    size: '24–40+ inches', lakes: 'Bass Lake',
+    fact: 'A torpedo of teeth — dark green flanks marked with rows of pale bean-shaped spots. Apex freshwater predator; mostly eats fish but won\'t hesitate at frogs, ducklings, or other pike. Use heavy leader.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'rainbowTrout', name: 'Rainbow Trout', latin: 'Oncorhynchus mykiss',
+    size: '8–20 inches', lakes: 'Alpine Lake',
+    fact: 'Silvery body shot through with a pink-to-crimson lateral band and densely freckled with small black spots. Native to Pacific drainages; widely stocked across the world for sport fishing.',
+    flies: ['Dry Fly'],
+  },
+  {
+    id: 'brookTrout', name: 'Brook Trout', latin: 'Salvelinus fontinalis',
+    size: '6–14 inches', lakes: 'Alpine Lake',
+    fact: 'Technically a char, not a true trout. Dark olive back with wormlike yellow vermiculations, red spots circled by blue halos, and snow-white edges on the lower fins. Eastern North America\'s native salmonid.',
+    flies: ['Nymph'],
+  },
+  {
+    id: 'brownTrout', name: 'Brown Trout', latin: 'Salmo trutta',
+    size: '10–22 inches', lakes: 'Alpine Lake',
+    fact: 'European introduction now naturalized across cold waters worldwide. Yellow-gold flanks dotted with large black and red spots ringed in pale halos. Wary, long-lived, and gets considerably bigger than other trout in the same water.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'cutthroatTrout', name: 'Cutthroat Trout', latin: 'Oncorhynchus clarkii',
+    size: '8–16 inches', lakes: 'Alpine Lake',
+    fact: 'Named for the bright orange-red slash mark under each side of the lower jaw. Native to western North America\'s clear cold streams; the state fish of seven U.S. states.',
+    flies: ['Wooly Bugger'],
+  },
+];
+
+let guideIndex = 0;
+
+function wireFieldGuide() {
+  const modal = document.getElementById('guide');
+  if (!modal) return;
+  const openBtn  = document.getElementById('guide-button');
+  const closeBtn = document.getElementById('guide-close-x');
+  const prevBtn  = document.getElementById('guide-prev');
+  const nextBtn  = document.getElementById('guide-next');
+
+  openBtn?.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    renderGuide();
+  });
+  closeBtn?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+  prevBtn?.addEventListener('click', () => {
+    guideIndex = (guideIndex - 1 + FIELD_GUIDE.length) % FIELD_GUIDE.length;
+    renderGuide();
+  });
+  nextBtn?.addEventListener('click', () => {
+    guideIndex = (guideIndex + 1) % FIELD_GUIDE.length;
+    renderGuide();
+  });
+
+  // Keyboard arrows when the guide is open
+  window.addEventListener('keydown', (e) => {
+    if (modal.classList.contains('hidden')) return;
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.key === 'ArrowLeft')  { prevBtn?.click(); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { nextBtn?.click(); e.preventDefault(); }
+    if (e.key === 'Escape')     { modal.classList.add('hidden'); }
+  });
+
+  // Build the thumbnail strip once (it doesn't change)
+  const thumbs = document.getElementById('guide-thumbs');
+  if (thumbs) {
+    thumbs.innerHTML = FIELD_GUIDE.map((entry, i) =>
+      `<button class="guide-thumb" data-i="${i}" title="${escapeHtmlGlobal(entry.name)}">` +
+        `<img src="${escapeHtmlGlobal(speciesPortraits[entry.id] || '')}" alt="" />` +
+      `</button>`
+    ).join('');
+    thumbs.querySelectorAll('.guide-thumb').forEach(b => {
+      b.addEventListener('click', () => {
+        guideIndex = parseInt(b.dataset.i, 10) || 0;
+        renderGuide();
+      });
+    });
+  }
+}
+
+function renderGuide() {
+  const e = FIELD_GUIDE[guideIndex];
+  if (!e) return;
+  const $ = (id) => document.getElementById(id);
+  const portrait = speciesPortraits[e.id] || '';
+  const img = $('guide-portrait');
+  if (img) { img.src = portrait; img.alt = e.name; }
+  if ($('guide-name'))   $('guide-name').textContent  = e.name;
+  if ($('guide-latin'))  $('guide-latin').textContent = e.latin;
+  if ($('guide-meta'))   $('guide-meta').innerHTML =
+    `<span>Size</span><span>${escapeHtmlGlobal(e.size)}</span>` +
+    `<span>Found in</span><span>${escapeHtmlGlobal(e.lakes)}</span>`;
+  if ($('guide-fact'))   $('guide-fact').textContent = e.fact;
+  if ($('guide-flies'))  $('guide-flies').innerHTML  = (e.flies || [])
+    .map(f => `<span class="guide-fly-chip">${escapeHtmlGlobal(f)}</span>`).join('');
+  if ($('guide-pageno')) $('guide-pageno').textContent = `${guideIndex + 1} / ${FIELD_GUIDE.length}`;
+  // Highlight current thumb + scroll it into view
+  document.querySelectorAll('#guide-thumbs .guide-thumb').forEach((b, i) => {
+    b.classList.toggle('active', i === guideIndex);
+    if (i === guideIndex) b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  });
 }
 
 function drawChatBubble(cx, cy, text) {

@@ -105,6 +105,7 @@
 
       <div class="menu-actions">
         <button id="profile-button" class="secondary">Profile</button>
+        <button id="guide-button" class="secondary">Field Guide</button>
         <button id="shop-button" class="secondary">Tackle Shop</button>
         <button id="derby-button" class="secondary">Multiplayer</button>
         <button id="start-button">Cast Off</button>
@@ -147,6 +148,40 @@
       <div class="results-board" id="results-board"></div>
       <div class="results-reward" id="results-reward"></div>
       <button id="results-close">Back to Menu</button>
+    </div>
+  </div>
+
+  <!-- Field Guide modal — flip through every species with image + facts -->
+  <div id="guide" class="hidden">
+    <div class="guide-card">
+      <div class="guide-header">
+        <div class="guide-title">Field Guide</div>
+        <button id="guide-close-x" class="x" aria-label="close">×</button>
+      </div>
+
+      <div class="guide-body">
+        <button id="guide-prev" class="guide-arrow" aria-label="previous">‹</button>
+
+        <div class="guide-page">
+          <div class="guide-portrait-wrap">
+            <img id="guide-portrait" alt="" />
+          </div>
+          <div class="guide-info">
+            <div class="guide-name" id="guide-name">—</div>
+            <div class="guide-latin" id="guide-latin">—</div>
+            <div class="guide-meta" id="guide-meta"></div>
+            <div class="guide-fact" id="guide-fact"></div>
+            <div class="guide-flies" id="guide-flies"></div>
+          </div>
+        </div>
+
+        <button id="guide-next" class="guide-arrow" aria-label="next">›</button>
+      </div>
+
+      <div class="guide-footer">
+        <div class="guide-pageno" id="guide-pageno">1 / 15</div>
+        <div class="guide-thumbs" id="guide-thumbs"></div>
+      </div>
     </div>
   </div>
 
@@ -758,6 +793,157 @@
       font: 600 13px -apple-system, system-ui, sans-serif;
       letter-spacing: 1px;
       cursor: pointer;
+    }
+
+    /* ---- FIELD GUIDE ---- */
+    #guide {
+      position: fixed; inset: 0;
+      background: rgba(10, 22, 18, 0.86);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 116;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    }
+    #guide.hidden { display: none; }
+    #guide .guide-card {
+      background: linear-gradient(135deg, rgba(28, 42, 36, 0.98), rgba(14, 26, 22, 0.98));
+      border: 2px solid rgba(255, 220, 130, 0.55);
+      border-radius: 14px;
+      padding: 18px 22px 16px;
+      width: 720px; max-width: 95vw; max-height: 92vh;
+      overflow-y: auto;
+      color: rgba(220, 230, 240, 0.92);
+      font: 14px/1.45 -apple-system, system-ui, sans-serif;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    #guide .guide-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 220, 130, 0.25);
+    }
+    #guide .guide-title {
+      font: 700 22px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.95); letter-spacing: 1px;
+    }
+    #guide .x { background: none; border: none; color: rgba(220, 230, 240, 0.7);
+      font-size: 26px; cursor: pointer; line-height: 1; padding: 0 4px;
+      touch-action: manipulation; }
+    #guide .x:hover { color: rgba(255, 220, 130, 0.95); }
+
+    #guide .guide-body {
+      display: grid;
+      grid-template-columns: 40px 1fr 40px;
+      gap: 10px;
+      align-items: stretch;
+    }
+    #guide .guide-arrow {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 8px;
+      cursor: pointer; font: 700 28px/1 'Georgia', serif;
+      padding: 0; min-height: 220px;
+      touch-action: manipulation;
+    }
+    #guide .guide-arrow:hover { background: rgba(255, 220, 130, 0.15); }
+    #guide .guide-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+    #guide .guide-page {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    #guide .guide-portrait-wrap {
+      background: linear-gradient(180deg, rgba(60,100,90,0.4), rgba(30,60,55,0.4));
+      border: 1px solid rgba(255, 220, 130, 0.22);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 160px;
+    }
+    #guide #guide-portrait {
+      width: 100%; height: auto;
+      max-height: 200px;
+      object-fit: contain;
+      image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;
+    }
+    #guide .guide-info { display: flex; flex-direction: column; gap: 6px; }
+    #guide .guide-name {
+      font: 700 22px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.98);
+    }
+    #guide .guide-latin {
+      font: italic 13px/1 -apple-system, system-ui, sans-serif;
+      color: rgba(180, 200, 210, 0.75);
+    }
+    #guide .guide-meta {
+      margin-top: 4px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
+      font-size: 12px;
+      color: rgba(220, 230, 240, 0.85);
+    }
+    #guide .guide-meta span:nth-child(odd) {
+      color: rgba(180, 200, 210, 0.7);
+      text-transform: uppercase; letter-spacing: 1px; font-size: 10px;
+    }
+    #guide .guide-fact {
+      color: rgba(220, 235, 230, 0.92);
+      font-size: 13px; line-height: 1.5;
+      margin-top: 6px;
+    }
+    #guide .guide-flies {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    #guide .guide-fly-chip {
+      background: rgba(255, 220, 130, 0.12);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 5px; padding: 3px 9px;
+      font: 600 11px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px;
+    }
+    #guide .guide-footer {
+      margin-top: 14px; padding-top: 10px;
+      border-top: 1px solid rgba(255, 220, 130, 0.18);
+    }
+    #guide .guide-pageno {
+      text-align: center;
+      color: rgba(180, 200, 210, 0.6);
+      font: 11px 'SF Mono', Menlo, monospace;
+      margin-bottom: 8px;
+    }
+    #guide .guide-thumbs {
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+    }
+    #guide .guide-thumb {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255, 220, 130, 0.18);
+      border-radius: 5px;
+      padding: 3px; width: 50px; height: 38px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.1s ease-out, background 0.1s ease-out;
+      touch-action: manipulation;
+    }
+    #guide .guide-thumb img {
+      max-width: 100%; max-height: 100%;
+      image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;
+    }
+    #guide .guide-thumb.active {
+      background: rgba(255, 220, 130, 0.18);
+      border-color: rgba(255, 220, 130, 0.95);
+    }
+    #guide .guide-thumb:hover { background: rgba(255, 220, 130, 0.10); }
+
+    @media (pointer: coarse), (max-width: 720px) {
+      #guide .guide-card { padding: 14px; }
+      #guide .guide-title { font-size: 19px; }
+      #guide .guide-body { grid-template-columns: 36px 1fr 36px; gap: 6px; }
+      #guide .guide-arrow { min-height: auto; padding: 8px 0; font-size: 22px; }
+      #guide .guide-page { grid-template-columns: 1fr; gap: 12px; }
+      #guide .guide-portrait-wrap { min-height: 130px; }
+      #guide #guide-portrait { max-height: 150px; }
+      #guide .guide-name { font-size: 19px; }
+      #guide .guide-thumb { width: 42px; height: 32px; }
     }
 
     /* ---- PROFILE MODAL ---- */
@@ -1552,8 +1738,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=14"></script>
-  <script src="sprites.js?v=14"></script>
-  <script src="sketch.js?v=14"></script>
+  <script src="multiplayer.js?v=15"></script>
+  <script src="sprites.js?v=15"></script>
+  <script src="sketch.js?v=15"></script>
 </body>
 </html>
