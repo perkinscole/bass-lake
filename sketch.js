@@ -11,6 +11,7 @@ let trees = [];
 let logs = [];
 let cattails = [];
 let rocks = [];
+let snags = [];      // sunken tree stumps with bits poking above water
 let ducks = [];                       // surface birds, drift around the lake
 let eagle = null;                     // active bald eagle, null when none
 let eagleSpawnCooldown = 1200;        // frames until next eagle attempt
@@ -152,7 +153,7 @@ const LEVELS = {
       crappie: 35, yellowPerch: 30,
       bass: 16, smallmouthBass: 10, chainPickerel: 5, northernPike: 2,
     },
-    propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110 },
+    propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110, snags: 40 },
     unlocked: true,
     unlockCost: 0,
   },
@@ -187,7 +188,7 @@ const LEVELS = {
       yellowPerch: 25,
     },
     // alpine lakes are clearer and rockier — no lilies/cattails, more rocks
-    propCounts: { lilypads: 0, weeds: 90, cattails: 0, trees: 300, logs: 18, rocks: 260 },
+    propCounts: { lilypads: 0, weeds: 90, cattails: 0, trees: 300, logs: 18, rocks: 260, snags: 18 },
     unlocked: false,
     unlockCost: 150,
   },
@@ -520,7 +521,7 @@ function buildWorld(seed) {
 
   // wipe any world that was here before so rebuilds are clean
   panfish = []; bass = []; lilypads = []; weeds = []; trees = [];
-  logs = []; cattails = []; rocks = []; ducks = [];
+  logs = []; cattails = []; rocks = []; snags = []; ducks = [];
   ripples = []; bubbles = []; eagle = null;
 
   lake = new Lake(WORLD_W, WORLD_H);
@@ -580,6 +581,22 @@ function buildWorld(seed) {
       x: p.x, y: p.y,
       r: random(6, 18),
       shade: 60 + random(-20, 30),
+    });
+  }
+
+  // Snags — sunken stumps with a stub poking above the surface. Predator-
+  // friendly cover (pickerel, pike, bass love these). Placed away from shore
+  // in mid-water, scattered around the basin.
+  for (let i = 0; i < (counts.snags || 0); i++) {
+    let p = lake.randomEdgePoint(random(0.55, 0.85));
+    if (!lake.contains(p.x, p.y, 25)) continue;
+    snags.push({
+      x: p.x, y: p.y,
+      r: random(7, 14),                  // submerged base radius
+      stubH: random(6, 14),              // height of the stub above water
+      stubLean: random(-0.6, 0.6),       // slight tilt
+      branches: floor(random(0, 3)),     // optional broken-off stub count
+      seed: random(1000),
     });
   }
 
@@ -1061,14 +1078,14 @@ function populateShop() {
 }
 
 function buildFlyIcons() {
-  flyIcons = {};
-  for (let flyType of ['fly', 'nymph', 'woolyBugger']) {
-    let g = createGraphics(120, 80);
-    g.pixelDensity(2);
-    g.clear();
-    drawFlyArt(g, flyType, 60, 40);
-    flyIcons[flyType] = g.canvas.toDataURL('image/png');
-  }
+  // Real pixel-art assets — see /images/. The HTML <img> tags below take
+  // these straight as src URLs. (The old procedural drawFlyArt() canvas
+  // generator is kept just below for reference / fallback.)
+  flyIcons = {
+    fly:         'images/adams-dry-fly.png',
+    nymph:       'images/prince-nymph.png',
+    woolyBugger: 'images/woolly-bugger.png',
+  };
 }
 
 function drawFlyArt(g, type, x, y) {
@@ -1356,6 +1373,28 @@ function buildStaticImage() {
     g.pop();
   }
 
+  // snags — sunken stumps with a stub above water
+  for (let s of snags) {
+    g.fill(28, 22, 18, 95);
+    g.ellipse(s.x, s.y, s.r * 2.6, s.r * 1.6);
+    g.fill(45, 35, 25, 120);
+    g.ellipse(s.x, s.y, s.r * 1.8, s.r * 1.1);
+    g.push();
+    g.translate(s.x, s.y - 1);
+    g.rotate(s.stubLean);
+    g.fill(220, 230, 235, 50);
+    g.ellipse(0, 0, s.r * 1.5, s.r * 0.7);
+    g.fill(60, 42, 28);
+    g.rect(-s.r * 0.32, -s.stubH, s.r * 0.64, s.stubH, 2);
+    g.fill(85, 58, 38);
+    g.rect(-s.r * 0.32, -s.stubH, s.r * 0.18, s.stubH, 2);
+    g.fill(140, 110, 75);
+    g.ellipse(0, -s.stubH, s.r * 0.62, s.r * 0.22);
+    g.fill(50, 35, 22);
+    g.ellipse(0, -s.stubH + 1, s.r * 0.45, s.r * 0.14);
+    g.pop();
+  }
+
   staticImg = g;
 }
 
@@ -1367,7 +1406,15 @@ function pickSpawnPoint(cfg) {
   // Habitat-aware spawn for both panfish-class and bass-class species.
   let p;
   if (cfg.class === 'bass') {
-    p = lake.randomEdgePoint(random(0.78, 0.93));
+    // Predators love structure — half the time, drop them right next to a
+    // snag or log. The other half they pick a deep mid-water position.
+    if (snags.length > 0 && random() < 0.4) {
+      p = jitterAround(random(snags), 35);
+    } else if (logs.length > 0 && random() < 0.3) {
+      p = jitterAround(random(logs), 50);
+    } else {
+      p = lake.randomEdgePoint(random(0.65, 0.90));
+    }
   } else if (cfg.habitat === 'weeds' && weeds.length > 0 && random() < 0.7) {
     p = jitterAround(random(weeds), 60);
   } else if (cfg.habitat === 'lilypads' && lilypads.length > 0 && random() < 0.7) {
@@ -2452,16 +2499,26 @@ const SPECIES = {
   smallmouthBass: {
     class: 'bass',
     sizeRange: [16, 22],
+    strikeRange: [80, 110],
+    scareR: 110,             // school panic radius when smallmouth strikes
   },
   chainPickerel: {
     class: 'bass',
-    sizeRange: [22, 30],     // long and lean
-    bodyAspect: 0.28,
+    sizeRange: [22, 30],
+    bodyAspect: 0.28,        // long and lean
+    strikeRange: [100, 140], // ambush from farther — like a thrown spear
+    scareR: 150,
+    cooldownBase: 420,       // sits motionless longer between strikes
+    cooldownJitter: 540,
   },
   northernPike: {
     class: 'bass',
-    sizeRange: [28, 40],     // big apex predator
-    bodyAspect: 0.26,
+    sizeRange: [28, 40],
+    bodyAspect: 0.26,        // huge apex predator
+    strikeRange: [120, 170],
+    scareR: 240,             // a pike strike scatters everything nearby
+    cooldownBase: 600,
+    cooldownJitter: 720,
   },
 
   // ---- ALPINE LAKE addition (Phase 7) ----
@@ -2528,6 +2585,23 @@ class Panfish {
       this.spookedUntil = frameCount + (cfg.spooky ? 200 : 120);
       this.spookFromX = player.pos.x;
       this.spookFromY = player.pos.y;
+    }
+
+    // Predator scatter — a striking pike/pickerel sends nearby schools
+    // bolting. Each bass-class predator with `scareR` triggers a spook on
+    // panfish in radius while it's dashing.
+    for (let b of bass) {
+      if (!b.dashing || !b.scareR) continue;
+      let bdx = this.pos.x - b.pos.x;
+      let bdy = this.pos.y - b.pos.y;
+      let bd2 = bdx * bdx + bdy * bdy;
+      if (bd2 < b.scareR * b.scareR) {
+        // Bigger predator -> longer panic, same flee direction maths as kayak
+        this.spookedUntil = Math.max(this.spookedUntil || 0, frameCount + 140);
+        this.spookFromX = b.pos.x;
+        this.spookFromY = b.pos.y;
+        break;
+      }
     }
 
     // SPOOK: if recently startled, sprint away from the disturbance and
@@ -2814,8 +2888,14 @@ class Bass {
     this.lurkPoint = this._pickLurkPoint();
     this.lurkHeading = random(TWO_PI);
     this.wiggle = random(TWO_PI);
-    this.strikeRange = random(70, 95);
-    this.species = species;
+    // Per-species strike range and scare radius (how far the dash scatters
+    // panfish). Pike/pickerel reach farther and scare bigger schools.
+    const stkRange = this.cfg.strikeRange || [70, 95];
+    this.strikeRange = random(stkRange[0], stkRange[1]);
+    this.scareR = this.cfg.scareR || 0;
+    // Pickerel hold position longer between strikes; pike less so (they roam).
+    this.cooldownBase = this.cfg.cooldownBase || 240;
+    this.cooldownJitter = this.cfg.cooldownJitter || 360;
     this.hooked = false;
     // bass sit deep near the bottom, surge up when striking
     this.z = 0.85;
@@ -2912,7 +2992,7 @@ class Bass {
       this.recoverFrames--;
       if (this.recoverFrames <= 0) {
         this.state = 'lurk';
-        this.cooldown = 240 + floor(random(360));
+        this.cooldown = this.cooldownBase + floor(random(this.cooldownJitter));
         this.lurkPoint = this._pickLurkPoint();
         this.target = null;
       }
@@ -4433,6 +4513,48 @@ function drawRock(r) {
   ellipse(r.x, r.y, r.r * 2, r.r * 1.4);
   fill(r.shade + 30, r.shade + 30, r.shade + 30, 200);
   ellipse(r.x - r.r * 0.2, r.y - r.r * 0.25, r.r * 0.7, r.r * 0.4);
+}
+
+// Snag — sunken stump with a chewed-off stub poking above the surface.
+// Cover for predators; visually breaks up open water and lets the player
+// read the lake bottom.
+function drawSnag(s) {
+  noStroke();
+  // Submerged base — dark blotch on the bottom that hints at structure
+  fill(28, 22, 18, 95);
+  ellipse(s.x, s.y, s.r * 2.6, s.r * 1.6);
+  fill(45, 35, 25, 120);
+  ellipse(s.x, s.y, s.r * 1.8, s.r * 1.1);
+
+  // Stub poking above the surface
+  push();
+  translate(s.x, s.y - 1);
+  rotate(s.stubLean);
+  // wet ring around the base
+  fill(220, 230, 235, 50);
+  ellipse(0, 0, s.r * 1.5, s.r * 0.7);
+  // stub body
+  fill(60, 42, 28);
+  rect(-s.r * 0.32, -s.stubH, s.r * 0.64, s.stubH, 2);
+  // bark highlight
+  fill(85, 58, 38);
+  rect(-s.r * 0.32, -s.stubH, s.r * 0.18, s.stubH, 2);
+  // cracked top
+  fill(140, 110, 75);
+  ellipse(0, -s.stubH, s.r * 0.62, s.r * 0.22);
+  fill(50, 35, 22);
+  ellipse(0, -s.stubH + 1, s.r * 0.45, s.r * 0.14);
+  // optional broken side branches
+  for (let i = 0; i < s.branches; i++) {
+    let a = (noise(s.seed + i) - 0.5) * 1.8;
+    push();
+    translate(0, -s.stubH * (0.4 + i * 0.2));
+    rotate(a);
+    fill(60, 42, 28);
+    rect(0, -1, s.r * 0.6, 2);
+    pop();
+  }
+  pop();
 }
 
 // ============================================================================

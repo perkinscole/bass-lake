@@ -87,6 +87,7 @@
   </div>
   <div id="menu">
     <div class="menu-card">
+      <img class="menu-hero" src="images/title-flyfisherman.png" alt="" />
       <div class="title" id="menu-title">Bass Lake</div>
       <div class="tagline" id="menu-tagline">fly fishing from a kayak on a procedural lake</div>
 
@@ -116,6 +117,7 @@
   <!-- Fly box — opens from clicking the HUD fly badge or pressing F -->
   <div id="flybox" class="hidden">
     <div class="flybox-card">
+      <img class="flybox-banner" src="images/fly-box.png" alt="" />
       <div class="flybox-title">Fly Box</div>
       <div class="flybox-grid" id="flybox-grid"></div>
       <button id="flybox-close">Close</button>
@@ -371,13 +373,18 @@
       inset: 0;
       background: rgba(10, 22, 18, 0.78);
       display: flex;
-      align-items: center;
+      align-items: flex-start;            /* allows scrolling tall menu */
       justify-content: center;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       z-index: 100;
       transition: opacity 0.4s ease-out;
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
     }
+    /* margin:auto on a flex child centers it vertically when there is
+       room, and lets the card scroll naturally when there isn't. */
+    #menu .menu-card { margin: auto; }
     #menu.hidden { opacity: 0; pointer-events: none; }
 
     #menu .menu-card {
@@ -392,6 +399,18 @@
       text-align: center;
     }
 
+    #menu .menu-hero {
+      display: block;
+      width: 160px; height: auto;
+      margin: -10px auto 6px auto;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,0.6));
+    }
+    @media (pointer: coarse), (max-width: 720px) {
+      #menu .menu-hero { width: 120px; margin-top: 0; margin-bottom: 4px; }
+    }
     #menu .title {
       font: 700 44px/1 'Georgia', serif;
       color: rgba(255, 230, 150, 0.95);
@@ -607,11 +626,20 @@
       text-align: center;
       box-shadow: 0 12px 40px rgba(0,0,0,0.7);
     }
+    #flybox .flybox-banner {
+      display: block;
+      width: 140px; height: auto;
+      margin: -8px auto 6px auto;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.55));
+    }
     #flybox .flybox-title {
       font: 700 22px/1 'Georgia', serif;
       color: rgba(255, 230, 150, 0.95);
       letter-spacing: 1px;
-      margin-bottom: 18px;
+      margin-bottom: 14px;
     }
     #flybox .flybox-grid {
       display: grid;
@@ -1738,8 +1766,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=15"></script>
-  <script src="sprites.js?v=15"></script>
-  <script src="sketch.js?v=15"></script>
+  <script src="multiplayer.js?v=16"></script>
+  <script src="sprites.js?v=16"></script>
+  <script src="sketch.js?v=16"></script>
 </body>
 </html>
