@@ -214,11 +214,12 @@ const LEVELS = {
   alpineLake: {
     name: 'Alpine Lake',
     blurb: 'cold clear high-country water · trout',
+    // Alpine-specific heroes only (the two trout-holding pixel art pieces)
+    // so an alpine session never accidentally shows the bass-lake heroes
+    // and vice versa.
     heroPool: [
       'images/alpine-girl.png',
       'images/alpine-guy.png',
-      'images/title-red-fisherman.png',
-      'images/cast-water-2.png',
     ],
     bgImg:   'images/alpine-lake-bg.png',
     // Mixed terrain blobs — snow patches AND bare rock AND meadow AND
