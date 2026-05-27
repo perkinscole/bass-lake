@@ -1388,7 +1388,7 @@
        mobile) so the two never overlap. */
     #hatch-hud {
       position: fixed;
-      top: 128px; left: 50%; transform: translateX(-50%);
+      top: 162px; left: 50%; transform: translateX(-50%);
       z-index: 11; pointer-events: none;
       background: rgba(20, 35, 30, 0.85);
       border: 1px solid rgba(255, 220, 130, 0.5);
@@ -1418,7 +1418,7 @@
     @media (pointer: coarse), (max-width: 720px) {
       /* Mobile sonar is 200x56 + ~30px chrome = ends around y:90. Place
          the hatch HUD below that with a small buffer. */
-      #hatch-hud { top: 100px; font-size: 11px; padding: 5px 10px; }
+      #hatch-hud { top: 134px; font-size: 11px; padding: 5px 10px; }
       #hatch-hud .emoji { font-size: 14px; }
     }
 
@@ -1445,7 +1445,7 @@
       position: fixed;
       /* Sits BELOW the hatch HUD so the persistent hatch pill stays
          pinned and the transient catch rows stack under it. */
-      top: 168px; left: 50%; transform: translateX(-50%);
+      top: 202px; left: 50%; transform: translateX(-50%);
       z-index: 11;
       display: flex; flex-direction: column; gap: 4px;
       pointer-events: none;
@@ -1473,8 +1473,8 @@
     #derby-feed .feed-row .who { color: rgba(255, 230, 150, 0.98); }
     #derby-feed .feed-row .pts { color: rgba(190, 230, 130, 0.98); margin-left: 4px; }
     @media (pointer: coarse), (max-width: 720px) {
-      /* Below the mobile hatch HUD (top:100, ~28px tall = ends ~128). */
-      #derby-feed { top: 140px; }
+      /* Below the mobile hatch HUD (top:134, ~28px tall = ends ~162). */
+      #derby-feed { top: 174px; }
     }
 
     /* ---- QUICK CHAT (button + popup menu) ---- */
@@ -2023,7 +2023,7 @@
     /* ---- SONAR ---- */
     #sonar {
       position: fixed;
-      top: 8px; left: 50%;
+      top: 42px; left: 50%;
       transform: translateX(-50%);
       background: rgba(15, 22, 18, 0.85);
       border: 1px solid rgba(255, 220, 130, 0.45);
@@ -2083,7 +2083,7 @@
       image-rendering: crisp-edges;
     }
     @media (pointer: coarse), (max-width: 720px) {
-      #sonar { top: 6px; }
+      #sonar { top: 40px; }
       #sonar canvas { width: 200px; height: 56px; }
     }
 
@@ -2100,8 +2100,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=39"></script>
-  <script src="sprites.js?v=39"></script>
-  <script src="sketch.js?v=39"></script>
+  <script src="multiplayer.js?v=40"></script>
+  <script src="sprites.js?v=40"></script>
+  <script src="sketch.js?v=40"></script>
 </body>
 </html>
