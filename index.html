@@ -1381,9 +1381,11 @@
     }
 
     /* ---- HATCH HUD (active hatch banner) ---- */
+    /* Sits below the sonar (which is ~115px tall on desktop, ~90px on
+       mobile) so the two never overlap. */
     #hatch-hud {
       position: fixed;
-      top: 90px; left: 50%; transform: translateX(-50%);
+      top: 128px; left: 50%; transform: translateX(-50%);
       z-index: 11; pointer-events: none;
       background: rgba(20, 35, 30, 0.85);
       border: 1px solid rgba(255, 220, 130, 0.5);
@@ -1410,10 +1412,10 @@
       font: 700 12px 'SF Mono', Menlo, monospace;
       color: rgba(190, 230, 130, 0.95);
     }
-    /* Mobile: tuck just under the slim derby strip when both are showing */
     @media (pointer: coarse), (max-width: 720px) {
-      #hatch-hud { top: 38px; font-size: 11px; padding: 5px 10px; }
-      body.derby-live #hatch-hud { top: 38px; }
+      /* Mobile sonar is 200x56 + ~30px chrome = ends around y:90. Place
+         the hatch HUD below that with a small buffer. */
+      #hatch-hud { top: 100px; font-size: 11px; padding: 5px 10px; }
       #hatch-hud .emoji { font-size: 14px; }
     }
 
@@ -1438,7 +1440,9 @@
     /* ---- DERBY EVENT FEED (catches by everyone) ---- */
     #derby-feed {
       position: fixed;
-      top: 50px; left: 50%; transform: translateX(-50%);
+      /* Sits BELOW the hatch HUD so the persistent hatch pill stays
+         pinned and the transient catch rows stack under it. */
+      top: 168px; left: 50%; transform: translateX(-50%);
       z-index: 11;
       display: flex; flex-direction: column; gap: 4px;
       pointer-events: none;
@@ -1465,6 +1469,10 @@
     #derby-feed .feed-row.in { opacity: 1; transform: translateY(0); }
     #derby-feed .feed-row .who { color: rgba(255, 230, 150, 0.98); }
     #derby-feed .feed-row .pts { color: rgba(190, 230, 130, 0.98); margin-left: 4px; }
+    @media (pointer: coarse), (max-width: 720px) {
+      /* Below the mobile hatch HUD (top:100, ~28px tall = ends ~128). */
+      #derby-feed { top: 140px; }
+    }
 
     /* ---- QUICK CHAT (button + popup menu) ---- */
     #chat-btn {
@@ -2058,8 +2066,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=35"></script>
-  <script src="sprites.js?v=35"></script>
-  <script src="sketch.js?v=35"></script>
+  <script src="multiplayer.js?v=36"></script>
+  <script src="sprites.js?v=36"></script>
+  <script src="sketch.js?v=36"></script>
 </body>
 </html>
