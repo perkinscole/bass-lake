@@ -12,6 +12,7 @@ let logs = [];
 let cattails = [];
 let rocks = [];
 let snags = [];      // sunken tree stumps with bits poking above water
+let peaks = [];      // snow-capped mountain peaks (alpine only)
 let ducks = [];                       // surface birds, drift around the lake
 let eagle = null;                     // active bald eagle, null when none
 let eagleSpawnCooldown = 1200;        // frames until next eagle attempt
@@ -119,7 +120,11 @@ const LEVELS = {
   bassLake: {
     name: 'Bass Lake',
     blurb: 'murky warm-water lake · sunfish, crappie, largemouth',
-    heroImg: 'images/title-flyfisherman.png',
+    heroPool: [
+      'images/title-flyfisherman.png',
+      'images/title-red-fisherman.png',
+      'images/cast-water-2.png',
+    ],
     bgImg:   'images/bass-lake-bg.png',
     palette: {
       forest:    [80, 95, 45],     // warm yellow-green meadow
@@ -162,7 +167,12 @@ const LEVELS = {
   alpineLake: {
     name: 'Alpine Lake',
     blurb: 'cold clear high-country water · trout',
-    heroImg: 'images/title-red-fisherman.png',
+    heroPool: [
+      'images/alpine-girl.png',
+      'images/alpine-guy.png',
+      'images/title-red-fisherman.png',
+      'images/cast-water-2.png',
+    ],
     bgImg:   'images/alpine-lake-bg.png',
     palette: {
       forest:    [232, 236, 242],     // bright snow with bluish cast
@@ -191,8 +201,9 @@ const LEVELS = {
       rainbowTrout: 40, brookTrout: 30, brownTrout: 15, cutthroatTrout: 6,
       yellowPerch: 25,
     },
-    // Alpine: sparse pines, lots of exposed rock, no lilies/cattails
-    propCounts: { lilypads: 0, weeds: 70, cattails: 0, trees: 180, logs: 14, rocks: 420, snags: 18 },
+    // Alpine: sparse pines, lots of exposed rock, snowcapped peaks scattered
+    // across the surrounding terrain. No lilies/cattails.
+    propCounts: { lilypads: 0, weeds: 70, cattails: 0, trees: 140, logs: 14, rocks: 420, snags: 18, peaks: 26 },
     unlocked: false,
     unlockCost: 150,
   },
@@ -525,7 +536,7 @@ function buildWorld(seed) {
 
   // wipe any world that was here before so rebuilds are clean
   panfish = []; bass = []; lilypads = []; weeds = []; trees = [];
-  logs = []; cattails = []; rocks = []; snags = []; ducks = [];
+  logs = []; cattails = []; rocks = []; snags = []; peaks = []; ducks = [];
   ripples = []; bubbles = []; eagle = null;
 
   lake = new Lake(WORLD_W, WORLD_H);
@@ -585,6 +596,19 @@ function buildWorld(seed) {
       x: p.x, y: p.y,
       r: random(6, 18),
       shade: 60 + random(-20, 30),
+    });
+  }
+
+  // Mountain peaks — only spawn if the level configures `peaks`. Placed
+  // in the forest zone WELL outside the lake so they read as distant peaks
+  // surrounding the basin. Alpine lake uses them for high-country topography.
+  for (let i = 0; i < (counts.peaks || 0); i++) {
+    let p = randomShorePoint(random(180, 700));
+    peaks.push({
+      x: p.x, y: p.y,
+      r: random(45, 110),       // chunky enough to read as a mountain
+      lean: random(-0.18, 0.18),
+      seed: random(1000),
     });
   }
 
@@ -981,29 +1005,22 @@ function populateFlyBox() {
   });
 }
 
-// Three-frame "opening the fly box" sequence using the new examine
-// sprites. Plays once on open, settles on the open-box frame.
+// Pool of "examining the fly box" pixel-art sprites. openFlyBox picks
+// ONE at random for variety — no animation, no flashing.
 const FLY_BOX_FRAMES = [
-  'images/fly-box.png',          // 0: closed box (the cover)
-  'images/examine-fly-box-1.png',// 1: angler examining
-  'images/examine-fly-box-2.png',// 2: first-person hands holding it open
-  'images/examine-fly-box-3.png',// 3: open box showing flies — final frame
+  'images/fly-box.png',
+  'images/examine-fly-box-1.png',
+  'images/examine-fly-box-2.png',
+  'images/examine-fly-box-3.png',
 ];
-let _flyBoxAnimTimers = [];
 
 function openFlyBox() {
   populateFlyBox();
   document.getElementById('flybox')?.classList.remove('hidden');
-  // Cancel any previous in-flight animation
-  _flyBoxAnimTimers.forEach(clearTimeout);
-  _flyBoxAnimTimers = [];
   const banner = document.querySelector('#flybox .flybox-banner');
-  if (!banner) return;
-  // Step through the frames, ~180ms each, then settle on the open box
-  const delays = [0, 180, 360, 540];
-  delays.forEach((ms, i) => {
-    _flyBoxAnimTimers.push(setTimeout(() => { banner.src = FLY_BOX_FRAMES[i]; }, ms));
-  });
+  if (banner) {
+    banner.src = FLY_BOX_FRAMES[Math.floor(Math.random() * FLY_BOX_FRAMES.length)];
+  }
 }
 function closeFlyBox() { document.getElementById('flybox')?.classList.add('hidden'); }
 
@@ -1037,9 +1054,25 @@ function populateLevelGroup() {
   });
 }
 
+// Random pick of a level's heroPool, cached per-level so hovering doesn't
+// flicker. A new pick happens whenever the level actually CHANGES (when
+// the user clicks the level card and currentLevel updates).
+const _heroChoice = {};
+function pickHeroForLevel(id) {
+  const L = LEVELS[id];
+  const pool = (L && L.heroPool) || (L && L.heroImg ? [L.heroImg] : []);
+  if (!pool.length) return null;
+  if (_heroChoice[id]) return _heroChoice[id];
+  _heroChoice[id] = pool[Math.floor(Math.random() * pool.length)];
+  return _heroChoice[id];
+}
+
+// Force a re-roll for a level — called when the user actively switches
+// to that level so each visit feels fresh.
+function rerollHeroForLevel(id) { delete _heroChoice[id]; return pickHeroForLevel(id); }
+
 // Swap menu hero image + body class (which CSS uses to pick the right
-// painted background) based on a level id. Falls back gracefully if a
-// level doesn't have heroImg/bgImg configured.
+// painted background) based on a level id.
 function applyMenuChromeForLevel(id) {
   const L = LEVELS[id];
   if (!L) return;
@@ -1048,9 +1081,10 @@ function applyMenuChromeForLevel(id) {
   const heroEl = document.querySelector('.menu-hero');
   if (titleEl)   titleEl.textContent = L.name;
   if (taglineEl) taglineEl.textContent = L.blurb;
-  if (heroEl && L.heroImg) heroEl.src = L.heroImg;
-  // body.level-bassLake / body.level-alpineLake — CSS keys the bg image
-  // off this so adding a new level is just an extra class rule.
+  const heroSrc = pickHeroForLevel(id);
+  if (heroEl && heroSrc) heroEl.src = heroSrc;
+  // body.level-<id> — CSS keys the bg image off this so adding a new
+  // level is just an extra class rule.
   document.body.classList.remove('level-bassLake', 'level-alpineLake');
   document.body.classList.add('level-' + id);
 }
@@ -1070,6 +1104,8 @@ async function onLevelCardClick(id) {
     playSound('buy');
   }
   playerState.level = id;
+  // Each fresh level switch picks a new hero from the pool
+  rerollHeroForLevel(id);
   saveProgress();
   // Flush any pending cloud-profile save BEFORE the reload, otherwise the
   // 1.2s debounce timer is killed by navigation and the next page load
@@ -1301,6 +1337,64 @@ function buildStaticImage() {
   for (let s of lake.sandSpecks) {
     g.fill(pal.sand[0], pal.sand[1], pal.sand[2], 140);
     g.ellipse(s.x, s.y, s.r);
+  }
+
+  // Mountain peaks (alpine only) — large snow-capped pyramid shapes that
+  // make the surrounding terrain read as high-country topography from
+  // above. Baked under the trees so trees sit on the foothills.
+  for (let p of peaks) {
+    // soft drop shadow
+    g.fill(0, 0, 0, 70);
+    g.ellipse(p.x + 6, p.y + 10, p.r * 2.2, p.r * 0.9);
+
+    // dark rock base (an irregular pyramid silhouette)
+    g.push();
+    g.translate(p.x, p.y);
+    g.rotate(p.lean);
+    g.fill(70, 78, 90);
+    g.beginShape();
+    g.vertex(-p.r,        p.r * 0.65);
+    g.vertex(-p.r * 0.55, p.r * 0.05);
+    g.vertex(-p.r * 0.25, -p.r * 0.55);
+    g.vertex(0,           -p.r);
+    g.vertex( p.r * 0.30, -p.r * 0.55);
+    g.vertex( p.r * 0.70, -p.r * 0.10);
+    g.vertex( p.r,         p.r * 0.65);
+    g.endShape(g.CLOSE);
+
+    // lit face — lighter rock on the upper-left
+    g.fill(120, 128, 140);
+    g.beginShape();
+    g.vertex(-p.r * 0.55, p.r * 0.05);
+    g.vertex(-p.r * 0.25, -p.r * 0.55);
+    g.vertex(0,           -p.r);
+    g.vertex(0,           -p.r * 0.10);
+    g.vertex(-p.r * 0.25, p.r * 0.05);
+    g.endShape(g.CLOSE);
+
+    // snow cap — bright white triangular field near the apex
+    g.fill(245, 248, 252);
+    g.beginShape();
+    g.vertex(-p.r * 0.45, -p.r * 0.30);
+    g.vertex(-p.r * 0.18, -p.r * 0.65);
+    g.vertex(0,           -p.r);
+    g.vertex( p.r * 0.22, -p.r * 0.62);
+    g.vertex( p.r * 0.40, -p.r * 0.25);
+    // dripping fingers down the rock face
+    g.vertex( p.r * 0.25, -p.r * 0.05);
+    g.vertex( p.r * 0.10, -p.r * 0.20);
+    g.vertex(-p.r * 0.10, -p.r * 0.05);
+    g.vertex(-p.r * 0.30, -p.r * 0.25);
+    g.endShape(g.CLOSE);
+
+    // crisp white highlight on the very tip
+    g.fill(255, 255, 255);
+    g.beginShape();
+    g.vertex(-p.r * 0.10, -p.r * 0.70);
+    g.vertex(0,           -p.r);
+    g.vertex( p.r * 0.12, -p.r * 0.70);
+    g.endShape(g.CLOSE);
+    g.pop();
   }
 
   // trees: trunks then canopies. Pines get a spiky, conical top-down look.
