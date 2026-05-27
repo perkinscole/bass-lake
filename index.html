@@ -87,9 +87,13 @@
   </div>
   <div id="menu">
     <div class="menu-card">
-      <img class="menu-hero" src="images/title-flyfisherman.png" alt="" />
-      <div class="title" id="menu-title">Bass Lake</div>
-      <div class="tagline" id="menu-tagline">fly fishing from a kayak on a procedural lake</div>
+      <div class="menu-banner">
+        <img class="menu-hero" src="images/title-flyfisherman.png" alt="" />
+        <div class="menu-banner-text">
+          <div class="title" id="menu-title">Bass Lake</div>
+          <div class="tagline" id="menu-tagline">fly fishing from a kayak on a procedural lake</div>
+        </div>
+      </div>
 
       <div class="level-group" id="level-group"><!-- populated by sketch.js --></div>
 
@@ -399,29 +403,36 @@
       text-align: center;
     }
 
+    /* Banner row — hero pixel art beside the title text */
+    #menu .menu-banner {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
     #menu .menu-hero {
-      display: block;
-      width: 160px; height: auto;
-      margin: -10px auto 6px auto;
+      width: 96px; height: 96px;
+      object-fit: contain;
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
       image-rendering: crisp-edges;
-      filter: drop-shadow(0 6px 16px rgba(0,0,0,0.6));
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.55));
+      flex-shrink: 0;
     }
-    @media (pointer: coarse), (max-width: 720px) {
-      #menu .menu-hero { width: 120px; margin-top: 0; margin-bottom: 4px; }
-    }
+    #menu .menu-banner-text { text-align: left; }
     #menu .title {
-      font: 700 44px/1 'Georgia', serif;
+      font: 700 38px/1 'Georgia', serif;
       color: rgba(255, 230, 150, 0.95);
-      letter-spacing: 2px;
+      letter-spacing: 1.5px;
       text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     #menu .tagline {
       color: rgba(180, 215, 200, 0.85);
       font-style: italic;
-      margin-bottom: 26px;
+      font-size: 13px;
+      margin: 0;
     }
 
     /* ---- LEVEL SELECTOR ---- */
@@ -571,8 +582,10 @@
         padding: 18px 16px 18px;
         box-sizing: border-box;
       }
-      #menu .title    { font-size: 30px; letter-spacing: 1px; margin-bottom: 4px; }
-      #menu .tagline  { font-size: 12px; margin-bottom: 16px; }
+      #menu .menu-banner { gap: 12px; margin-bottom: 14px; }
+      #menu .menu-hero { width: 72px; height: 72px; }
+      #menu .title    { font-size: 26px; letter-spacing: 0.5px; }
+      #menu .tagline  { font-size: 11px; }
 
       /* Level cards stack on narrow screens; full width each */
       #menu .level-group { gap: 8px; margin-bottom: 16px; }
@@ -1766,8 +1779,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=16"></script>
-  <script src="sprites.js?v=16"></script>
-  <script src="sketch.js?v=16"></script>
+  <script src="multiplayer.js?v=17"></script>
+  <script src="sprites.js?v=17"></script>
+  <script src="sketch.js?v=17"></script>
 </body>
 </html>

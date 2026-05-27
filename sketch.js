@@ -1006,7 +1006,7 @@ function populateLevelGroup() {
   if (taglineEl) taglineEl.textContent = lvl().blurb;
 }
 
-function onLevelCardClick(id) {
+async function onLevelCardClick(id) {
   if (!LEVELS[id]) return;
   if (id === currentLevel) return;
   if (!playerState.levelsUnlocked[id]) {
@@ -1022,6 +1022,10 @@ function onLevelCardClick(id) {
   }
   playerState.level = id;
   saveProgress();
+  // Flush any pending cloud-profile save BEFORE the reload, otherwise the
+  // 1.2s debounce timer is killed by navigation and the next page load
+  // reads stale cloud state that overwrites the unlock we just made.
+  if (window.MP?.flushProfile) await MP.flushProfile();
   // hard reload for a clean world rebuild with new palette/species/props
   location.reload();
 }

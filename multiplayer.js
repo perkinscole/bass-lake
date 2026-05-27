@@ -138,6 +138,8 @@ MP.signInWithEmail = async function (email) {
 };
 
 MP.signOut = async function () {
+  // Make sure any in-flight progress save lands before we drop the session
+  await MP.flushProfile();
   await MP.client.auth.signOut();
   // Sign back in anonymously so the game keeps working — they'll get a
   // fresh blank profile until they sign in with email again.
@@ -544,20 +546,47 @@ MP.loadProfile = async function () {
 
 // Save patch fields. Debounced so a burst of saveProgress calls turns into
 // one network round-trip instead of many.
+//
+// IMPORTANT: anything that triggers a page reload (level switch, sign out)
+// MUST call MP.flushProfile() first — otherwise the debounce timer is
+// killed by the navigation and the cloud row is left stale, causing the
+// next applyCloudProfile() to overwrite the change you just made.
+MP._pendingProfilePatch = null;
+
 MP.saveProfile = function (patch) {
   if (!MP.userId) return;
-  // Merge into our cached copy so the in-memory state stays consistent
+  // Merge into our cached copy + pending patch so the in-memory state and
+  // the next debounced write both see the full change set.
   if (MP.profile) Object.assign(MP.profile, patch);
+  MP._pendingProfilePatch = { ...(MP._pendingProfilePatch || {}), ...patch };
   clearTimeout(MP._profileSaveTimer);
-  MP._profileSaveTimer = setTimeout(async () => {
-    try {
-      const row = { ...patch, updated_at: new Date().toISOString() };
-      const { error } = await MP.client.from('profiles')
-        .update(row).eq('player_id', MP.userId);
-      if (error) console.warn('[MP] saveProfile failed:', error.message);
-    } catch (e) { console.warn('[MP] saveProfile threw:', e); }
-  }, 1200);
+  MP._profileSaveTimer = setTimeout(() => MP.flushProfile(), 1200);
 };
+
+// Send any pending profile changes RIGHT NOW. Awaitable so callers can
+// reload the page only after the cloud has been updated.
+MP.flushProfile = async function () {
+  clearTimeout(MP._profileSaveTimer);
+  MP._profileSaveTimer = null;
+  if (!MP.userId || !MP._pendingProfilePatch) return;
+  const patch = MP._pendingProfilePatch;
+  MP._pendingProfilePatch = null;
+  try {
+    const row = { ...patch, updated_at: new Date().toISOString() };
+    const { error } = await MP.client.from('profiles')
+      .update(row).eq('player_id', MP.userId);
+    if (error) console.warn('[MP] flushProfile failed:', error.message);
+  } catch (e) { console.warn('[MP] flushProfile threw:', e); }
+};
+
+// Page-unload safety: if the user closes the tab while a save is pending,
+// kick it off with keepalive so it actually reaches the server.
+window.addEventListener('beforeunload', () => {
+  if (MP._pendingProfilePatch && MP.userId) {
+    // Best-effort fire-and-forget; the browser won't await this.
+    MP.flushProfile();
+  }
+});
 
 MP.sendChat = function (text) {
   if (!MP._lobbyCh || !MP.currentDerby) return;
