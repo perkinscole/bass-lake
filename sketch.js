@@ -142,10 +142,12 @@ const HATCH_TYPES = [
     bonusSpecies: ['bass','smallmouthBass','chainPickerel','northernPike','brownTrout','cutthroatTrout'],
     bonusBiteRange: 18, bonusInterest: 90 },
 ];
-let currentHatch = null;       // { ...HATCH_TYPES[i], startedAt, endsAt }
+let currentHatch = null;       // { ...HATCH_TYPES[i], x, y, r, startedAt, endsAt }
 let nextHatchAt  = 0;          // frameCount when next hatch can begin
-const HATCH_DURATION_S = 70;   // ~70s per hatch
-const HATCH_GAP_S      = 100;  // ~100s of calm water between hatches (jittered)
+let hatchBugs    = [];         // floating insect particles above the water
+const HATCH_DURATION_S = 80;   // ~80s per hatch
+const HATCH_GAP_S      = 110;  // ~110s of calm water between hatches (jittered)
+const HATCH_RADIUS_RANGE = [180, 320];  // hatch zone radius in world units
 let lastCatchToast = null;        // { species, time } for brief on-screen popup
 let lastMissToast = null;         // { reason, time } when a fish escapes
 
@@ -189,7 +191,7 @@ const LEVELS = {
     species:   [
       'bluegill', 'pumpkinseed', 'crappie',
       'greenSunfish', 'redbreastSunfish', 'spottedSunfish',
-      'yellowPerch', 'shiner',
+      'yellowPerch',
       'bass', 'smallmouthBass', 'chainPickerel', 'northernPike',
     ],
     catches: {
@@ -204,7 +206,7 @@ const LEVELS = {
     },
     spawn: {
       bluegill: 50, pumpkinseed: 30, greenSunfish: 25, redbreastSunfish: 20, spottedSunfish: 20,
-      crappie: 35, yellowPerch: 30, shiner: 100,
+      crappie: 35, yellowPerch: 30,
       bass: 16, smallmouthBass: 10, chainPickerel: 5, northernPike: 2,
     },
     propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110, snags: 40 },
@@ -253,7 +255,7 @@ const LEVELS = {
       bgClear:   [25, 32, 42],
     },
     treeStyle: 'pine',
-    species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout', 'yellowPerch', 'shiner'],
+    species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout', 'yellowPerch'],
     catches: {
       fly:         ['rainbowTrout'],
       nymph:       ['brookTrout', 'yellowPerch'],
@@ -265,7 +267,7 @@ const LEVELS = {
     },
     spawn: {
       rainbowTrout: 40, brookTrout: 30, brownTrout: 15, cutthroatTrout: 6,
-      yellowPerch: 25, shiner: 70,
+      yellowPerch: 25,
     },
     // Alpine: sparse pines, lots of exposed rock, snowcapped peaks scattered
     // across the surrounding terrain. No lilies/cattails.
@@ -824,6 +826,8 @@ function finishSetup() {
   });
   let menuBtn = document.getElementById('menu-btn');
   if (menuBtn) menuBtn.addEventListener('click', () => toggleMenu());
+  let netBtn = document.getElementById('net-btn');
+  if (netBtn) netBtn.addEventListener('click', () => sampleWaterAtKayak());
   let muteBtn = document.getElementById('mute-btn');
   if (muteBtn) {
     muteBtn.textContent = muted ? '🔇' : '🔊';
@@ -1743,6 +1747,9 @@ function draw() {
 
   // Eagle shadow on water — drawn under lily pads so pads cast above it
   if (eagle) eagle.drawShadow();
+  // Hatch zone — soft ring at the boundary + drifting bug specks inside.
+  // Drawn on the water surface, under lily pads and the kayak.
+  drawHatchZone();
 
   // lily pads on top so fish appear to swim under them
   for (let lp of lilypads) { if (inView(lp.x, lp.y, lp.r * 1.5)) drawLilypad(lp); }
@@ -1967,6 +1974,7 @@ function keyPressed() {
     if (box && box.classList.contains('hidden')) openFlyBox();
     else closeFlyBox();
   }
+  if (key === 'n' || key === 'N') sampleWaterAtKayak();
 }
 
 function toggleMenu() {
@@ -2735,22 +2743,9 @@ const SPECIES = {
 
   // ---- BAIT FISH (Phase 9) ----
   // Tiny silvery forage fish — uncatchable (not in any level's catches),
-  // school very tightly near the surface, and act as visible prey for
-  // predators. They make the lake feel alive.
-  shiner: {
-    class: 'panfish',
-    sizeRange: [4, 6],
-    bodyAspect: 0.32,
-    maxSpeed: 1.4, maxForce: 0.040,
-    sepR: 6, neighR: 30, fleeR: 110,
-    sepW: 1.2, aliW: 2.0, cohW: 2.5, fleeW: 3.2,    // very tight schools
-    habitat: 'weeds', habitatW: 0.02,
-    depthBias: -0.001,
-    schoolWith: 'shiner',
-    depthAlpha: 240,
-    zRange: [0.02, 0.18],                            // surface-loving
-    baitfish: true,
-  },
+  // (Shiners were removed — they didn't read well visually. Bait fish
+  // are now an invisible part of the ecosystem; the Sample Net tool
+  // reports their abundance + the relevant fly to use.)
 
   // ---- ALPINE LAKE addition (Phase 7) ----
   brownTrout: {
@@ -2913,6 +2908,26 @@ class Panfish {
     this.acc.add(ali.mult(cfg.aliW));
     this.acc.add(coh.mult(cfg.cohW));
     this.acc.add(flee.mult(cfg.fleeW));
+
+    // Hatch attraction — fish congregate where bugs are coming off the
+    // water. Stronger pull for species in the hatch's bonus list (they're
+    // actually keying on the hatch); a weak pull for everyone else
+    // (general activity draws bystanders).
+    if (currentHatch) {
+      const hdx = currentHatch.x - this.pos.x;
+      const hdy = currentHatch.y - this.pos.y;
+      const hd2 = hdx * hdx + hdy * hdy;
+      // Only pull within ~3x the hatch radius so distant fish keep doing
+      // their thing.
+      const pullR = currentHatch.r * 3;
+      if (hd2 < pullR * pullR && hd2 > 1) {
+        const hd = Math.sqrt(hd2);
+        const inBonus = currentHatch.bonusSpecies && currentHatch.bonusSpecies.includes(this.species);
+        const w = inBonus ? 0.55 : 0.18;
+        this.acc.x += (hdx / hd) * this.maxForce * w;
+        this.acc.y += (hdy / hd) * this.maxForce * w;
+      }
+    }
 
     // habitat attraction — gentle pull toward a preferred structure
     if ((frameCount + this.habitatPhase) % 600 === 0) this._pickHabitat();
@@ -4315,18 +4330,24 @@ class FlyCast {
 
   _findBitingFish() {
     let cfg = this.cfg;
-    // Hatch bonus: if a matching hatch is active AND we're throwing the
-    // matching fly, bite range extends. Reading the water and picking the
-    // right fly during a hatch is rewarded.
-    const hatchBonus = (currentHatch && currentHatch.fly === this.flyType) ? currentHatch.bonusBiteRange : 0;
+    // Hatch bonus: only applies when the fly lands INSIDE the hatch zone
+    // AND we're throwing the matching fly. Player has to find the rising
+    // bugs and put the fly in the right water.
+    let inHatch = false;
+    if (currentHatch && currentHatch.fly === this.flyType) {
+      const dx = this.flyX - currentHatch.x;
+      const dy = this.flyY - currentHatch.y;
+      if (dx * dx + dy * dy <= currentHatch.r * currentHatch.r) inHatch = true;
+    }
+    const hatchBonus = inHatch ? currentHatch.bonusBiteRange : 0;
     let bestD = cfg.biteRange + hatchBonus;
     let best = null;
     // What does THIS fly type catch in the current level? Build a quick lookup.
     let levelCatches = lvl().catches[this.flyType] || [];
     let canCatch = Object.create(null);
     for (let sp of levelCatches) canCatch[sp] = true;
-    // During a matching hatch, additional species also key on the fly.
-    if (currentHatch && currentHatch.fly === this.flyType) {
+    // When the fly is in the hatch zone, additional species key on it.
+    if (inHatch) {
       for (let sp of currentHatch.bonusSpecies) canCatch[sp] = true;
     }
     let spookedNow = (f) => f.spookedUntil && frameCount < f.spookedUntil;
@@ -5814,78 +5835,235 @@ function drawProfilePreview() {
 // top-level let, then exported on window so eval / devtools can hit it.
 function forceHatch(id) {
   const h = id ? HATCH_TYPES.find(t => t.id === id) : HATCH_TYPES[Math.floor(Math.random() * HATCH_TYPES.length)];
-  if (!h) return;
-  currentHatch = { ...h, startedAt: frameCount, endsAt: frameCount + 60 * HATCH_DURATION_S };
-  flashHatchBanner(`${h.emoji} ${h.label} — try a ${FLY_CONFIG[h.fly].label}!`, 'in');
+  if (!h || !lake) return;
+  const center = lake.randomInteriorPoint();
+  if (!center) return;
+  const radius = HATCH_RADIUS_RANGE[0] + Math.random() * (HATCH_RADIUS_RANGE[1] - HATCH_RADIUS_RANGE[0]);
+  currentHatch = { ...h, x: center.x, y: center.y, r: radius,
+    startedAt: frameCount, endsAt: frameCount + 60 * HATCH_DURATION_S };
+  hatchBugs = [];
 }
 window.forceHatch = forceHatch;
 
+// ============================================================================
+// Sample Net (Phase 9 follow-up) — diegetic substitute for visible bait
+// fish. The player drops a sample net at the kayak's current position and
+// gets a quick readout of what's living in this patch of water: nearby
+// fish species, dominant insect activity (especially during a hatch),
+// and a recommended fly. Press N to use it.
+// ============================================================================
+function sampleWaterAtKayak() {
+  if (!player || !lake) return;
+  const px = player.pos.x, py = player.pos.y;
+  const SAMPLE_R = 220;
+
+  // Count nearby fish by species (skip hooked + dead)
+  const fishCounts = {};
+  const within = (a, b) => {
+    const d = Math.hypot(a.pos.x - px, a.pos.y - py);
+    return d < SAMPLE_R;
+  };
+  for (const f of panfish) if (!f.dead && !f.hooked && within(f)) fishCounts[f.species] = (fishCounts[f.species] || 0) + 1;
+  for (const b of bass)    if (!b.hooked && within(b))            fishCounts[b.species] = (fishCounts[b.species] || 0) + 1;
+
+  // Find nearby habitat features that affect insect populations
+  const nearWeeds  = weeds.some(w => Math.hypot(w.x - px, w.y - py) < 80);
+  const nearLogs   = logs.some(l  => Math.hypot(l.x - px, l.y - py) < 90);
+  const nearLilies = lilypads.some(l => Math.hypot(l.x - px, l.y - py) < 60);
+  const nearRocks  = rocks.some(r  => Math.hypot(r.x - px, r.y - py) < 80);
+
+  // Active hatch nearby?
+  let hatchInfo = null;
+  if (currentHatch) {
+    const hd = Math.hypot(currentHatch.x - px, currentHatch.y - py);
+    if (hd < currentHatch.r * 1.3) hatchInfo = { label: currentHatch.label, fly: currentHatch.fly, inside: hd < currentHatch.r };
+  }
+
+  // Build the bug-life readout based on habitat
+  const bugs = [];
+  if (nearWeeds)  bugs.push('Damselfly nymphs');
+  if (nearLilies) bugs.push('Bluegill fry');
+  if (nearLogs)   bugs.push('Caddis larvae');
+  if (nearRocks)  bugs.push('Stonefly nymphs');
+  if (!bugs.length) bugs.push('Midge larvae');
+
+  // Decide what fly to recommend. Hatch wins; else dominant species.
+  let recFly = null, recReason = '';
+  if (hatchInfo) {
+    recFly = hatchInfo.fly;
+    recReason = hatchInfo.inside ? 'inside the hatch — match it' : 'hatch nearby — paddle over';
+  } else {
+    // Find the top non-bait species and look up which fly catches it
+    const top = Object.entries(fishCounts).sort((a, b) => b[1] - a[1])[0];
+    if (top) {
+      for (const [fly, list] of Object.entries(lvl().catches || {})) {
+        if (list.includes(top[0])) { recFly = fly; recReason = `mostly ${prettySpeciesName(top[0])} — they take ${FLY_CONFIG[fly].label}`; break; }
+      }
+    }
+    if (!recFly) { recFly = 'fly'; recReason = 'quiet water — try a Dry Fly'; }
+  }
+
+  // Ripple at the kayak so the act is diegetic
+  ripples.push(new Ripple(px, py, 32));
+  ripples.push(new Ripple(px, py, 18));
+  playSound?.('splash', { volume: 0.35, rate: 1.2 });
+
+  // Build the readout
+  const fishLines = Object.entries(fishCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([sp, n]) => `<span class="sample-row"><span class="sample-n">${n}</span> ${escapeHtmlGlobal(prettySpeciesName(sp))}</span>`)
+    .join('') || `<span class="sample-row sample-empty">no fish in range</span>`;
+  const bugLine = bugs.map(b => `<span class="sample-bug">${escapeHtmlGlobal(b)}</span>`).join('');
+  const hatchLine = hatchInfo
+    ? `<div class="sample-hatch">${currentHatch.emoji} ${escapeHtmlGlobal(hatchInfo.label)} ${hatchInfo.inside ? '· here' : '· nearby'}</div>`
+    : '';
+  const recLine = recFly
+    ? `<div class="sample-rec">Try: <b>${escapeHtmlGlobal(FLY_CONFIG[recFly].label)}</b><span class="sample-reason">${escapeHtmlGlobal(recReason)}</span></div>`
+    : '';
+
+  showSampleResult(`
+    <div class="sample-title">🪣 Sample Net</div>
+    ${hatchLine}
+    <div class="sample-block">
+      <div class="sample-header">Fish nearby</div>
+      <div class="sample-grid">${fishLines}</div>
+    </div>
+    <div class="sample-block">
+      <div class="sample-header">Insect life</div>
+      <div class="sample-bugs">${bugLine}</div>
+    </div>
+    ${recLine}
+  `);
+}
+
+function showSampleResult(html) {
+  let el = document.getElementById('sample-result');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sample-result';
+    document.body.appendChild(el);
+    el.addEventListener('click', () => el.classList.remove('show'));
+  }
+  el.innerHTML = html;
+  el.classList.remove('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => el.classList.remove('show'), 7000);
+}
+
 function tickHatch() {
-  // Spawn a few rise rings while a hatch is on so the surface looks alive.
   if (currentHatch) {
     if (frameCount > currentHatch.endsAt) {
-      flashHatchBanner(`${currentHatch.emoji} ${currentHatch.label} ending…`, 'fade');
       currentHatch = null;
+      hatchBugs = [];
       nextHatchAt = frameCount + 60 * (HATCH_GAP_S * 0.6 + Math.random() * HATCH_GAP_S * 0.8);
       return;
     }
-    // Frequency of rises ramps up mid-hatch then tapers — feels like the
-    // real bell curve of an emergence.
+    // Rises are CONCENTRATED inside the hatch radius — that's the visible
+    // cue the player looks for. Bell-curve frequency over the duration.
     const t = (frameCount - currentHatch.startedAt) / (currentHatch.endsAt - currentHatch.startedAt);
     const bell = 1 - Math.abs(t - 0.5) * 1.6;
-    const chance = Math.max(0.02, 0.25 * bell);
+    const chance = Math.max(0.05, 0.45 * bell);
     if (Math.random() < chance && lake) {
-      for (let i = 0; i < 1 + Math.floor(Math.random() * 2); i++) {
-        const p = lake.randomInteriorPoint();
-        if (p) ripples.push(new Ripple(p.x, p.y, 6 + Math.random() * 4));
-      }
+      const ring = jitterInHatch(currentHatch);
+      if (ring) ripples.push(new Ripple(ring.x, ring.y, 5 + Math.random() * 4));
+    }
+    // Spawn floating bug particles above the water inside the radius
+    if (Math.random() < 0.6 * bell) {
+      const b = jitterInHatch(currentHatch);
+      if (b) hatchBugs.push({
+        x: b.x, y: b.y, vy: -0.25 - Math.random() * 0.4,
+        vx: (Math.random() - 0.5) * 0.3,
+        life: 60 + Math.random() * 90, age: 0,
+      });
+    }
+    // Update existing bug particles
+    for (let i = hatchBugs.length - 1; i >= 0; i--) {
+      const bg = hatchBugs[i];
+      bg.x += bg.vx; bg.y += bg.vy;
+      bg.age++;
+      if (bg.age >= bg.life) hatchBugs.splice(i, 1);
     }
     return;
   }
-  // Between hatches — wait, then kick one off.
+  // Between hatches — wait, then start one at a random water position.
+  hatchBugs = [];
   if (nextHatchAt === 0) {
     nextHatchAt = frameCount + 60 * (HATCH_GAP_S * 0.5 + Math.random() * HATCH_GAP_S * 0.8);
     return;
   }
-  if (frameCount >= nextHatchAt) {
+  if (frameCount >= nextHatchAt && lake) {
     const h = HATCH_TYPES[Math.floor(Math.random() * HATCH_TYPES.length)];
+    const center = lake.randomInteriorPoint();
+    if (!center) return;
+    const radius = HATCH_RADIUS_RANGE[0] + Math.random() * (HATCH_RADIUS_RANGE[1] - HATCH_RADIUS_RANGE[0]);
     currentHatch = { ...h,
+      x: center.x, y: center.y, r: radius,
       startedAt: frameCount,
       endsAt:    frameCount + 60 * HATCH_DURATION_S,
     };
-    flashHatchBanner(`${h.emoji} ${h.label} — try a ${FLY_CONFIG[h.fly].label}!`, 'in');
   }
 }
 
-// Render a thin pinned banner at the top of the screen describing the
-// current hatch + remaining seconds. Cheap DOM update.
+// Pick a point inside the hatch radius (over water). Tries a few times in
+// case the center+radius slops over land.
+function jitterInHatch(h) {
+  for (let i = 0; i < 6; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * h.r;       // uniform density across disk
+    const x = h.x + Math.cos(a) * r;
+    const y = h.y + Math.sin(a) * r;
+    if (lake && lake.contains(x, y, 6)) return { x, y };
+  }
+  return null;
+}
+
+// Draw the hatch zone — soft ring at the boundary + drifting bug specks
+// inside. Subtle so the player reads it the way a real angler reads water:
+// concentrated rises across an area.
+function drawHatchZone() {
+  if (!currentHatch) return;
+  push();
+  // Soft outer ring marking the hatch boundary (visible but not loud)
+  noFill();
+  stroke(255, 240, 180, 38);
+  strokeWeight(2);
+  ellipse(currentHatch.x, currentHatch.y, currentHatch.r * 2, currentHatch.r * 2);
+  // Floating bug particles above the surface
+  noStroke();
+  for (const bg of hatchBugs) {
+    const fade = 1 - bg.age / bg.life;
+    fill(40, 40, 30, 200 * fade);
+    ellipse(bg.x, bg.y, 1.6, 1.6);
+  }
+  pop();
+}
+
+// Subtle HUD pill that just hints a hatch is on somewhere — no fly hint,
+// no big announcement. The player still has to find the rising water and
+// see what kind of bugs are coming off (or use the Sample Net tool).
 function renderHatchHud() {
   const el = document.getElementById('hatch-hud');
   if (!el) return;
-  if (!currentHatch) { if (!el.classList.contains('hidden')) el.classList.add('hidden'); return; }
-  el.classList.remove('hidden');
-  const remaining = Math.max(0, Math.round((currentHatch.endsAt - frameCount) / 60));
-  el.innerHTML = `<span class="emoji">${currentHatch.emoji}</span>` +
-    `<span class="lbl">${escapeHtmlGlobal(currentHatch.label)}</span>` +
-    `<span class="fly">${escapeHtmlGlobal(FLY_CONFIG[currentHatch.fly].label)}</span>` +
-    `<span class="sec">${remaining}s</span>`;
-}
-
-// One-off animated toast when a hatch begins / ends — uses the existing
-// catch-toast style. Just a quick fade.
-function flashHatchBanner(text, mode) {
-  let t = document.getElementById('hatch-toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'hatch-toast';
-    document.body.appendChild(t);
+  if (!currentHatch || !player) {
+    if (!el.classList.contains('hidden')) el.classList.add('hidden');
+    return;
   }
-  t.textContent = text;
-  t.classList.remove('show');
-  // double-rAF so the transition picks up the new state
-  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
-  clearTimeout(t._hideTimer);
-  t._hideTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  el.classList.remove('hidden');
+  const dx = currentHatch.x - player.pos.x;
+  const dy = currentHatch.y - player.pos.y;
+  const dist = Math.hypot(dx, dy);
+  // Only call out species type when you're already in the zone; otherwise
+  // just a vague "something is rising over there".
+  let label;
+  if (dist < currentHatch.r) {
+    label = `${currentHatch.emoji} ${currentHatch.label} · here`;
+  } else {
+    const ft = Math.round(dist * 0.4);
+    label = `${currentHatch.emoji} rising water · ${ft}ft`;
+  }
+  el.innerHTML = `<span class="lbl">${escapeHtmlGlobal(label)}</span>`;
 }
 
 // ============================================================================

@@ -132,6 +132,9 @@
   <!-- Live derby event feed — "Mike landed a bass · +40" pops during a derby -->
   <div id="derby-feed"></div>
 
+  <!-- Sample Net — drops a quick water sample at the kayak's location (N) -->
+  <button id="net-btn" title="Sample the water (N)">🪣</button>
+
   <!-- Quick-chat button (visible during derby only) + canned-message popup -->
   <button id="chat-btn" class="hidden" title="Quick chat (T)">💬</button>
   <div id="chat-menu" class="hidden">
@@ -1222,6 +1225,104 @@
       #profile .profile-title { font-size: 19px; }
     }
 
+    /* ---- SAMPLE NET RESULT PANEL ---- */
+    #sample-result {
+      position: fixed;
+      top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.96);
+      z-index: 15;
+      background: rgba(20, 35, 30, 0.92);
+      border: 2px solid rgba(255, 220, 130, 0.7);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 280px; max-width: 360px;
+      color: rgba(220, 240, 220, 0.95);
+      font: 13px/1.45 -apple-system, system-ui, sans-serif;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    }
+    #sample-result.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; cursor: pointer; }
+    #sample-result .sample-title {
+      font: 700 16px/1 'Georgia', serif;
+      color: rgba(255, 230, 150, 0.95);
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    #sample-result .sample-hatch {
+      color: rgba(255, 220, 130, 0.95);
+      background: rgba(255, 220, 130, 0.10);
+      border: 1px solid rgba(255, 220, 130, 0.4);
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    #sample-result .sample-block { margin-bottom: 8px; }
+    #sample-result .sample-header {
+      color: rgba(180, 200, 210, 0.75);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      margin-bottom: 4px;
+    }
+    #sample-result .sample-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px;
+    }
+    #sample-result .sample-row {
+      display: flex; align-items: baseline; gap: 5px;
+      font-size: 12px;
+    }
+    #sample-result .sample-n {
+      color: rgba(190, 230, 130, 0.95);
+      font: 700 13px 'SF Mono', Menlo, monospace;
+      min-width: 14px;
+    }
+    #sample-result .sample-empty { color: rgba(180, 200, 210, 0.55); font-style: italic; }
+    #sample-result .sample-bugs { display: flex; flex-wrap: wrap; gap: 4px; }
+    #sample-result .sample-bug {
+      background: rgba(255, 220, 130, 0.12);
+      border: 1px solid rgba(255, 220, 130, 0.32);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 11px;
+      color: rgba(255, 230, 150, 0.92);
+    }
+    #sample-result .sample-rec {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 220, 130, 0.2);
+      font-size: 13px;
+    }
+    #sample-result .sample-rec b { color: rgba(190, 230, 130, 0.98); }
+    #sample-result .sample-reason {
+      display: block;
+      color: rgba(180, 200, 210, 0.75);
+      font-size: 11px; font-style: italic;
+      margin-top: 2px;
+    }
+
+    /* ---- NET BUTTON (HUD) ---- */
+    #net-btn {
+      position: fixed; bottom: 12px; left: 144px;
+      width: 36px; height: 36px; padding: 0;
+      background: rgba(20, 35, 30, 0.7);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      color: rgba(255, 230, 150, 0.95);
+      border-radius: 8px;
+      font: 18px/1 -apple-system, system-ui, sans-serif;
+      cursor: pointer;
+      z-index: 10;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      touch-action: manipulation;
+    }
+    #net-btn:hover { background: rgba(255, 220, 130, 0.18); }
+    /* On mobile move it where the chat button isn't, and shift chat button right */
+    @media (pointer: coarse), (max-width: 720px) {
+      #net-btn { bottom: 90px; left: 12px; width: 44px; height: 44px; font-size: 22px; }
+      /* if chat-btn is at left:100 on desktop, push it past the net button */
+      #chat-btn { /* mobile chat-btn is bottom-center; no change needed */ }
+    }
+
     /* ---- HATCH HUD (active hatch banner) ---- */
     #hatch-hud {
       position: fixed;
@@ -1900,8 +2001,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=30"></script>
-  <script src="sprites.js?v=30"></script>
-  <script src="sketch.js?v=30"></script>
+  <script src="multiplayer.js?v=31"></script>
+  <script src="sprites.js?v=31"></script>
+  <script src="sketch.js?v=31"></script>
 </body>
 </html>
