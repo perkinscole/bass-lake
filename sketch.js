@@ -119,6 +119,8 @@ const LEVELS = {
   bassLake: {
     name: 'Bass Lake',
     blurb: 'murky warm-water lake · sunfish, crappie, largemouth',
+    heroImg: 'images/title-flyfisherman.png',
+    bgImg:   'images/bass-lake-bg.png',
     palette: {
       forest:    [80, 95, 45],     // warm yellow-green meadow
       forestSpeck: [60, 80, 40],
@@ -160,6 +162,8 @@ const LEVELS = {
   alpineLake: {
     name: 'Alpine Lake',
     blurb: 'cold clear high-country water · trout',
+    heroImg: 'images/title-red-fisherman.png',
+    bgImg:   'images/alpine-lake-bg.png',
     palette: {
       forest:    [165, 180, 155],  // pale rocky meadow
       forestSpeck: [120, 140, 110],
@@ -1022,11 +1026,33 @@ function populateLevelGroup() {
   group.querySelectorAll('.level-card').forEach(el => {
     el.addEventListener('click', () => onLevelCardClick(el.dataset.level));
   });
-  // Also reflect current level in the menu title/tagline
-  let titleEl = document.getElementById('menu-title');
-  let taglineEl = document.getElementById('menu-tagline');
-  if (titleEl) titleEl.textContent = lvl().name;
-  if (taglineEl) taglineEl.textContent = lvl().blurb;
+  // Also reflect current level in the menu title/tagline + chrome
+  applyMenuChromeForLevel(currentLevel);
+
+  // Preview chrome on hover/tap of unlocked level cards (lets the player
+  // see the bg + hero for a level before they commit).
+  group.querySelectorAll('.level-card').forEach(el => {
+    el.addEventListener('mouseenter', () => applyMenuChromeForLevel(el.dataset.level));
+    el.addEventListener('mouseleave', () => applyMenuChromeForLevel(currentLevel));
+  });
+}
+
+// Swap menu hero image + body class (which CSS uses to pick the right
+// painted background) based on a level id. Falls back gracefully if a
+// level doesn't have heroImg/bgImg configured.
+function applyMenuChromeForLevel(id) {
+  const L = LEVELS[id];
+  if (!L) return;
+  const titleEl = document.getElementById('menu-title');
+  const taglineEl = document.getElementById('menu-tagline');
+  const heroEl = document.querySelector('.menu-hero');
+  if (titleEl)   titleEl.textContent = L.name;
+  if (taglineEl) taglineEl.textContent = L.blurb;
+  if (heroEl && L.heroImg) heroEl.src = L.heroImg;
+  // body.level-bassLake / body.level-alpineLake — CSS keys the bg image
+  // off this so adding a new level is just an extra class rule.
+  document.body.classList.remove('level-bassLake', 'level-alpineLake');
+  document.body.classList.add('level-' + id);
 }
 
 async function onLevelCardClick(id) {

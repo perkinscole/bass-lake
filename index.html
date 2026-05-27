@@ -373,16 +373,33 @@
     #menu {
       position: fixed;
       inset: 0;
-      background: rgba(10, 22, 18, 0.78);
+      background-color: rgba(10, 22, 18, 0.55);    /* darken layer over painting */
+      background-image:
+        linear-gradient(rgba(10, 22, 18, 0.55), rgba(10, 22, 18, 0.78)),
+        url('images/bass-lake-bg.png');            /* default to bass lake */
+      background-size: cover;
+      background-position: center;
+      background-blend-mode: normal;
       display: flex;
       align-items: flex-start;            /* allows scrolling tall menu */
       justify-content: center;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       z-index: 100;
-      transition: opacity 0.4s ease-out;
+      transition: opacity 0.4s ease-out, background-image 0.5s ease-out;
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
+    }
+    /* Per-level background — body.level-<id> drives the painting */
+    body.level-bassLake #menu {
+      background-image:
+        linear-gradient(rgba(10, 22, 18, 0.55), rgba(10, 22, 18, 0.78)),
+        url('images/bass-lake-bg.png');
+    }
+    body.level-alpineLake #menu {
+      background-image:
+        linear-gradient(rgba(10, 22, 18, 0.55), rgba(10, 22, 18, 0.78)),
+        url('images/alpine-lake-bg.png');
     }
     /* margin:auto on a flex child centers it vertically when there is
        room, and lets the card scroll naturally when there isn't. */
@@ -1779,8 +1796,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=19"></script>
-  <script src="sprites.js?v=19"></script>
-  <script src="sketch.js?v=19"></script>
+  <script src="multiplayer.js?v=20"></script>
+  <script src="sprites.js?v=20"></script>
+  <script src="sketch.js?v=20"></script>
 </body>
 </html>
