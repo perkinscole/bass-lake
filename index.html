@@ -554,13 +554,15 @@
       color: rgba(20, 35, 30, 0.95);
       border: none;
       border-radius: 8px;
-      padding: 12px 36px;
-      font: 700 16px -apple-system, system-ui, sans-serif;
+      padding: 12px 14px;
+      font: 700 13px -apple-system, system-ui, sans-serif;
       letter-spacing: 1px;
       text-transform: uppercase;
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
       transition: transform 0.1s ease-out, background 0.15s ease-out;
+      width: 100%;
+      box-sizing: border-box;
     }
     #menu button:hover { background: rgba(255, 235, 170, 1); transform: translateY(-1px); }
     #menu button:active { transform: translateY(1px); }
@@ -570,7 +572,18 @@
       border: 1px solid rgba(255, 220, 130, 0.55);
     }
     #menu button.secondary:hover { background: rgba(255, 220, 130, 0.18); }
-    #menu .menu-actions { display: flex; gap: 12px; justify-content: center; }
+    /* 4 secondary buttons on a row + Cast Off full-width below.
+       Cast Off always stays inside the card. */
+    #menu .menu-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    #menu .menu-actions #start-button {
+      grid-column: 1 / -1;
+      padding: 14px;
+      font-size: 15px;
+    }
 
     #menu .fly-card.locked {
       opacity: 0.4;
@@ -617,20 +630,15 @@
       #menu .controls { padding: 10px 12px; margin-bottom: 16px; font-size: 12px; }
       #menu .ctrl-row .key { min-width: 44px; font-size: 11px; padding: 1px 6px; margin-right: 8px; }
 
-      /* Three action buttons in a single row are too wide — stack them and
-         right-size the touch target. */
-      #menu .menu-actions {
-        flex-direction: column;
-        gap: 8px;
-      }
+      /* On phones: secondary buttons stack in 2 columns, Cast Off full-width */
+      #menu .menu-actions { grid-template-columns: 1fr 1fr; }
       #menu button {
-        width: 100%;
-        padding: 14px 16px;
-        font-size: 14px;
+        padding: 14px 8px;
+        font-size: 12px;
         letter-spacing: 0.5px;
-        box-sizing: border-box;
         touch-action: manipulation;
       }
+      #menu .menu-actions #start-button { padding: 16px; font-size: 15px; }
     }
 
     /* ---- FLY BOX ---- */
@@ -1796,8 +1804,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=20"></script>
-  <script src="sprites.js?v=20"></script>
-  <script src="sketch.js?v=20"></script>
+  <script src="multiplayer.js?v=22"></script>
+  <script src="sprites.js?v=22"></script>
+  <script src="sketch.js?v=22"></script>
 </body>
 </html>

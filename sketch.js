@@ -165,16 +165,16 @@ const LEVELS = {
     heroImg: 'images/title-red-fisherman.png',
     bgImg:   'images/alpine-lake-bg.png',
     palette: {
-      forest:    [165, 180, 155],  // pale rocky meadow
-      forestSpeck: [120, 140, 110],
-      sand:      [200, 200, 195],
-      shoreline: [80, 75, 70],     // grey rock
-      waterBase: [50, 110, 145],   // alpine blue
-      patchTeal: [80, 165, 200],
-      patchAlgae:[35, 80, 110],
-      patchTannin:[120, 135, 145],
-      ambient:   [220, 230, 240],
-      bgClear:   [25, 35, 45],
+      forest:    [232, 236, 242],     // bright snow with bluish cast
+      forestSpeck: [140, 148, 158],   // grey rock specks (snow-dusted boulders)
+      sand:      [240, 244, 250],     // pure snow at the water edge
+      shoreline: [38, 42, 50],        // wet dark rock — pops against snow
+      waterBase: [55, 115, 150],      // deep alpine blue
+      patchTeal: [110, 185, 215],     // shallow turquoise
+      patchAlgae:[40,  85, 115],      // cold-water depth
+      patchTannin:[180, 200, 215],    // pale ice-blue (replaces tannin)
+      ambient:   [225, 235, 245],
+      bgClear:   [25, 32, 42],
     },
     treeStyle: 'pine',
     species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout', 'yellowPerch'],
@@ -191,8 +191,8 @@ const LEVELS = {
       rainbowTrout: 40, brookTrout: 30, brownTrout: 15, cutthroatTrout: 6,
       yellowPerch: 25,
     },
-    // alpine lakes are clearer and rockier — no lilies/cattails, more rocks
-    propCounts: { lilypads: 0, weeds: 90, cattails: 0, trees: 300, logs: 18, rocks: 260, snags: 18 },
+    // Alpine: sparse pines, lots of exposed rock, no lilies/cattails
+    propCounts: { lilypads: 0, weeds: 70, cattails: 0, trees: 180, logs: 14, rocks: 420, snags: 18 },
     unlocked: false,
     unlockCost: 150,
   },
@@ -1290,14 +1290,16 @@ function buildStaticImage() {
   g.scale(STATIC_SCALE);
   g.noStroke();
 
-  // forest floor
-  g.background(80, 95, 45);
+  // forest floor — palette-driven so snowy alpine vs warm bass lake
+  // actually look different.
+  const pal = lvl().palette;
+  g.background(pal.forest[0], pal.forest[1], pal.forest[2]);
   for (let s of lake.dirtSpecks) {
     g.fill(s.c[0], s.c[1], s.c[2], 180);
     g.ellipse(s.x, s.y, s.r);
   }
   for (let s of lake.sandSpecks) {
-    g.fill(195, 170, 115, 140);
+    g.fill(pal.sand[0], pal.sand[1], pal.sand[2], 140);
     g.ellipse(s.x, s.y, s.r);
   }
 
@@ -1901,7 +1903,10 @@ class Lake {
     }
 
     // Pre-bake static shore particles so they don't flicker every frame.
+    // Speck colors center on lvl().palette.forestSpeck so alpine ends up
+    // with grey rock specks on white snow, not olive specks on snow.
     let areaScale = (this.w * this.h) / (1200 * 800);
+    const fs = (typeof lvl === 'function' && lvl().palette?.forestSpeck) || [80, 95, 45];
     this.dirtSpecks = [];
     for (let i = 0; i < 1500 * areaScale; i++) {
       let x = random(this.w);
@@ -1910,7 +1915,7 @@ class Lake {
         this.dirtSpecks.push({
           x, y,
           r: random(2, 6),
-          c: [60 + random(-20, 30), 80 + random(-20, 20), 40 + random(-15, 25)]
+          c: [fs[0] + random(-18, 18), fs[1] + random(-18, 18), fs[2] + random(-15, 15)],
         });
       }
     }
