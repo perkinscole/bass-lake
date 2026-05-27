@@ -5893,22 +5893,13 @@ window.forceHatch = forceHatch;
 function sampleWaterAtKayak() {
   if (!player || !lake) return;
   const px = player.pos.x, py = player.pos.y;
-  const SAMPLE_R = 220;
 
-  // Count nearby fish by species (skip hooked + dead)
-  const fishCounts = {};
-  const within = (a, b) => {
-    const d = Math.hypot(a.pos.x - px, a.pos.y - py);
-    return d < SAMPLE_R;
-  };
-  for (const f of panfish) if (!f.dead && !f.hooked && within(f)) fishCounts[f.species] = (fishCounts[f.species] || 0) + 1;
-  for (const b of bass)    if (!b.hooked && within(b))            fishCounts[b.species] = (fishCounts[b.species] || 0) + 1;
-
-  // Find nearby habitat features that affect insect populations
+  // Find nearby habitat features that affect both insect and baitfish populations
   const nearWeeds  = weeds.some(w => Math.hypot(w.x - px, w.y - py) < 80);
   const nearLogs   = logs.some(l  => Math.hypot(l.x - px, l.y - py) < 90);
   const nearLilies = lilypads.some(l => Math.hypot(l.x - px, l.y - py) < 60);
   const nearRocks  = rocks.some(r  => Math.hypot(r.x - px, r.y - py) < 80);
+  const nearSnags  = snags.some(s  => Math.hypot(s.x - px, s.y - py) < 70);
 
   // Active hatch nearby?
   let hatchInfo = null;
@@ -5917,28 +5908,46 @@ function sampleWaterAtKayak() {
     if (hd < currentHatch.r * 1.3) hatchInfo = { label: currentHatch.label, fly: currentHatch.fly, inside: hd < currentHatch.r };
   }
 
-  // Build the bug-life readout based on habitat
+  // Insect life inferred from habitat
   const bugs = [];
   if (nearWeeds)  bugs.push('Damselfly nymphs');
-  if (nearLilies) bugs.push('Bluegill fry');
+  if (nearLilies) bugs.push('Mayfly nymphs');
   if (nearLogs)   bugs.push('Caddis larvae');
   if (nearRocks)  bugs.push('Stonefly nymphs');
+  if (nearSnags)  bugs.push('Dragonfly nymphs');
   if (!bugs.length) bugs.push('Midge larvae');
 
-  // Decide what fly to recommend. Hatch wins; else dominant species.
+  // Baitfish — what small forage fish would be in this microhabitat. Cold
+  // alpine vs warm bass lake have very different baitfish.
+  const isAlpine = currentLevel === 'alpineLake';
+  const baits = [];
+  if (isAlpine) {
+    if (nearRocks)   baits.push('Sculpin');
+    if (nearWeeds)   baits.push('Trout fry');
+    if (nearLogs)    baits.push('Smelt');
+    if (!baits.length) baits.push('Redside shiners');
+  } else {
+    if (nearLilies)  baits.push('Bluegill fry');
+    if (nearWeeds)   baits.push('Golden shiners');
+    if (nearLogs || nearSnags) baits.push('Fathead minnows');
+    if (nearRocks)   baits.push('Crayfish');
+    if (!baits.length) baits.push('Emerald shiners');
+  }
+
+  // Decide which fly to recommend. Hatch wins; else habitat hints.
   let recFly = null, recReason = '';
   if (hatchInfo) {
     recFly = hatchInfo.fly;
     recReason = hatchInfo.inside ? 'inside the hatch — match it' : 'hatch nearby — paddle over';
+  } else if (nearRocks || nearLogs || nearSnags) {
+    recFly = 'woolyBugger';
+    recReason = 'cover holds predators — strip a streamer';
+  } else if (nearLilies || nearWeeds) {
+    recFly = 'fly';
+    recReason = 'panfish water — float a dry fly';
   } else {
-    // Find the top non-bait species and look up which fly catches it
-    const top = Object.entries(fishCounts).sort((a, b) => b[1] - a[1])[0];
-    if (top) {
-      for (const [fly, list] of Object.entries(lvl().catches || {})) {
-        if (list.includes(top[0])) { recFly = fly; recReason = `mostly ${prettySpeciesName(top[0])} — they take ${FLY_CONFIG[fly].label}`; break; }
-      }
-    }
-    if (!recFly) { recFly = 'fly'; recReason = 'quiet water — try a Dry Fly'; }
+    recFly = 'nymph';
+    recReason = 'open water — drift a nymph deep';
   }
 
   // Ripple at the kayak so the act is diegetic
@@ -5947,12 +5956,8 @@ function sampleWaterAtKayak() {
   playSound?.('splash', { volume: 0.35, rate: 1.2 });
 
   // Build the readout
-  const fishLines = Object.entries(fishCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([sp, n]) => `<span class="sample-row"><span class="sample-n">${n}</span> ${escapeHtmlGlobal(prettySpeciesName(sp))}</span>`)
-    .join('') || `<span class="sample-row sample-empty">no fish in range</span>`;
   const bugLine = bugs.map(b => `<span class="sample-bug">${escapeHtmlGlobal(b)}</span>`).join('');
+  const baitLine = baits.map(b => `<span class="sample-bug">${escapeHtmlGlobal(b)}</span>`).join('');
   const hatchLine = hatchInfo
     ? `<div class="sample-hatch">${currentHatch.emoji} ${escapeHtmlGlobal(hatchInfo.label)} ${hatchInfo.inside ? '· here' : '· nearby'}</div>`
     : '';
@@ -5964,12 +5969,12 @@ function sampleWaterAtKayak() {
     <div class="sample-title">🪣 Sample Net</div>
     ${hatchLine}
     <div class="sample-block">
-      <div class="sample-header">Fish nearby</div>
-      <div class="sample-grid">${fishLines}</div>
-    </div>
-    <div class="sample-block">
       <div class="sample-header">Insect life</div>
       <div class="sample-bugs">${bugLine}</div>
+    </div>
+    <div class="sample-block">
+      <div class="sample-header">Bait fish</div>
+      <div class="sample-bugs">${baitLine}</div>
     </div>
     ${recLine}
   `);
@@ -6007,21 +6012,56 @@ function tickHatch() {
       const ring = jitterInHatch(currentHatch);
       if (ring) ripples.push(new Ripple(ring.x, ring.y, 5 + Math.random() * 4));
     }
-    // Spawn floating bug particles above the water inside the radius
-    if (Math.random() < 0.6 * bell) {
+    // Spawn floating bug particles above the water inside the radius.
+    // 70% are RISING (freshly emerged adults flying off), 30% are SPENT
+    // (mating adults falling back — these land and make a tiny ripple).
+    if (Math.random() < 0.7 * bell) {
       const b = jitterInHatch(currentHatch);
-      if (b) hatchBugs.push({
-        x: b.x, y: b.y, vy: -0.25 - Math.random() * 0.4,
-        vx: (Math.random() - 0.5) * 0.3,
-        life: 60 + Math.random() * 90, age: 0,
-      });
+      if (b) {
+        const rising = Math.random() < 0.7;
+        const altMax = 0.55 + Math.random() * 0.45;
+        hatchBugs.push({
+          gx: b.x, gy: b.y,                              // water position
+          alt: rising ? 0 : altMax,                       // current altitude (0..1)
+          altMax,
+          altVel: 0.010 + Math.random() * 0.015,
+          rising,
+          driftX: (Math.random() - 0.5) * 0.45,
+          driftY: (Math.random() - 0.5) * 0.30,
+          type:   currentHatch.id,                        // mayfly / caddis / midge / damsel etc.
+          wingSeed: Math.random() * Math.PI * 2,
+          age: 0,
+          maxAge: 300 + Math.random() * 240,
+          landed: false,
+        });
+      }
     }
     // Update existing bug particles
     for (let i = hatchBugs.length - 1; i >= 0; i--) {
       const bg = hatchBugs[i];
-      bg.x += bg.vx; bg.y += bg.vy;
       bg.age++;
-      if (bg.age >= bg.life) hatchBugs.splice(i, 1);
+      if (bg.rising) {
+        bg.alt = Math.min(bg.altMax, bg.alt + bg.altVel);
+        // Once it tops out, drift gets stronger and it keeps wandering
+        bg.gx += bg.driftX * (1 + bg.alt * 1.5);
+        bg.gy += bg.driftY * (1 + bg.alt * 1.5);
+      } else if (!bg.landed) {
+        // Falling — slower than rising; drift less
+        bg.alt = Math.max(0, bg.alt - bg.altVel * 0.6);
+        bg.gx += bg.driftX * 0.5;
+        bg.gy += bg.driftY * 0.5;
+        if (bg.alt <= 0.02) {
+          bg.landed = true;
+          bg.alt = 0;
+          // Bug touches the water — spawn a tiny ripple where it landed
+          if (lake && lake.contains(bg.gx, bg.gy, 4)) {
+            ripples.push(new Ripple(bg.gx, bg.gy, 5 + Math.random() * 3));
+          }
+          // Fade out shortly after landing
+          bg.maxAge = bg.age + 24;
+        }
+      }
+      if (bg.age >= bg.maxAge) hatchBugs.splice(i, 1);
     }
     return;
   }
@@ -6057,23 +6097,86 @@ function jitterInHatch(h) {
   return null;
 }
 
-// Draw the hatch zone — soft ring at the boundary + drifting bug specks
-// inside. Subtle so the player reads it the way a real angler reads water:
-// concentrated rises across an area.
+// Draw the hatch zone — no boundary ring; the player reads it from the
+// concentrated surface rises and the bugs lifting off the water. Each bug
+// is a tiny shape with wings (mayfly upright wings, caddis tent wings,
+// midges as specks). Bugs rising drift up + outward; spent bugs fall back
+// and land with a small ripple.
 function drawHatchZone() {
   if (!currentHatch) return;
   push();
-  // Soft outer ring marking the hatch boundary (visible but not loud)
-  noFill();
-  stroke(255, 240, 180, 38);
-  strokeWeight(2);
-  ellipse(currentHatch.x, currentHatch.y, currentHatch.r * 2, currentHatch.r * 2);
-  // Floating bug particles above the surface
   noStroke();
   for (const bg of hatchBugs) {
-    const fade = 1 - bg.age / bg.life;
-    fill(40, 40, 30, 200 * fade);
-    ellipse(bg.x, bg.y, 1.6, 1.6);
+    drawHatchBug(bg);
+  }
+  pop();
+}
+
+function drawHatchBug(bg) {
+  // Visual altitude offset — bug appears slightly up-left of its water
+  // position (top-down "lift" trick). Scale grows a touch with altitude.
+  const lift  = bg.alt * 14;
+  const sx    = bg.gx - lift * 0.35;
+  const sy    = bg.gy - lift;
+  const scale = 0.7 + bg.alt * 0.6;
+  const ageFade = bg.landed
+    ? Math.max(0, 1 - (bg.age - (bg.maxAge - 24)) / 24)   // quick fade after landing
+    : Math.min(1, bg.age / 8);                            // pop-in
+  const alpha = 220 * ageFade;
+
+  // Shadow on the water at the GROUND position — shrinks as bug rises
+  fill(0, 0, 0, 70 * (1 - bg.alt * 0.6));
+  ellipse(bg.gx, bg.gy, 2.2 * scale * (1 + bg.alt * 0.4), 1.2 * scale);
+
+  // Body + wings — silhouette varies by hatch type
+  push();
+  translate(sx, sy);
+  // tiny wing flutter
+  const flutter = Math.sin(bg.wingSeed + bg.age * 0.6);
+  const wingW = 2.4 * scale * (0.8 + Math.abs(flutter) * 0.4);
+  const wingH = 1.6 * scale;
+
+  if (bg.type === 'midge') {
+    // Just a tiny dark speck for midges
+    fill(40, 35, 28, alpha);
+    ellipse(0, 0, 1.6 * scale, 1.0 * scale);
+  } else if (bg.type === 'caddis') {
+    // Caddis — tent-shaped wings folded over body
+    fill(60, 50, 40, alpha);
+    ellipse(0, 0, 2.4 * scale, 1.2 * scale);
+    fill(150, 130, 90, alpha * 0.75);
+    triangle(-wingW * 0.5, 0,
+              wingW * 0.5, 0,
+              0,           -wingH * 0.7);
+  } else if (bg.type === 'damsel' || bg.type === 'stone') {
+    // Long lean body + 2 pairs of long thin wings
+    fill(70, 90, 110, alpha);
+    ellipse(0, 0, 3.6 * scale, 0.9 * scale);
+    fill(180, 200, 220, alpha * 0.55);
+    ellipse(-0.4 * scale, -wingH * 0.4, wingW * 1.4, wingH * 0.5);
+    ellipse( 0.4 * scale, -wingH * 0.4, wingW * 1.4, wingH * 0.5);
+    ellipse(-0.4 * scale,  wingH * 0.4, wingW * 1.1, wingH * 0.4);
+    ellipse( 0.4 * scale,  wingH * 0.4, wingW * 1.1, wingH * 0.4);
+  } else if (bg.type === 'baitball') {
+    // Schooling fry flicks — small silver streaks
+    fill(220, 230, 240, alpha);
+    ellipse(0, 0, 2.6 * scale, 0.7 * scale);
+    fill(80, 110, 140, alpha * 0.6);
+    ellipse(-0.8 * scale, 0, 1 * scale, 0.5 * scale);
+  } else {
+    // Default mayfly — upright sail wings + two filament tails
+    fill(80, 60, 40, alpha);
+    ellipse(0, 0.2 * scale, 2.4 * scale, 1.0 * scale);
+    fill(225, 220, 200, alpha * 0.8);
+    // Two upright wings (sails)
+    ellipse(-0.7 * scale, -wingH * 0.5, wingW * 0.7, wingH * 1.1);
+    ellipse( 0.7 * scale, -wingH * 0.5, wingW * 0.7, wingH * 1.1);
+    // Tail filaments
+    stroke(80, 60, 40, alpha);
+    strokeWeight(0.6);
+    line(0, 0.5 * scale, -0.8 * scale, 1.4 * scale);
+    line(0, 0.5 * scale,  0.8 * scale, 1.4 * scale);
+    noStroke();
   }
   pop();
 }
