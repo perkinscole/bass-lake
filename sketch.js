@@ -977,7 +977,30 @@ function populateFlyBox() {
   });
 }
 
-function openFlyBox()  { populateFlyBox(); document.getElementById('flybox')?.classList.remove('hidden'); }
+// Three-frame "opening the fly box" sequence using the new examine
+// sprites. Plays once on open, settles on the open-box frame.
+const FLY_BOX_FRAMES = [
+  'images/fly-box.png',          // 0: closed box (the cover)
+  'images/examine-fly-box-1.png',// 1: angler examining
+  'images/examine-fly-box-2.png',// 2: first-person hands holding it open
+  'images/examine-fly-box-3.png',// 3: open box showing flies — final frame
+];
+let _flyBoxAnimTimers = [];
+
+function openFlyBox() {
+  populateFlyBox();
+  document.getElementById('flybox')?.classList.remove('hidden');
+  // Cancel any previous in-flight animation
+  _flyBoxAnimTimers.forEach(clearTimeout);
+  _flyBoxAnimTimers = [];
+  const banner = document.querySelector('#flybox .flybox-banner');
+  if (!banner) return;
+  // Step through the frames, ~180ms each, then settle on the open box
+  const delays = [0, 180, 360, 540];
+  delays.forEach((ms, i) => {
+    _flyBoxAnimTimers.push(setTimeout(() => { banner.src = FLY_BOX_FRAMES[i]; }, ms));
+  });
+}
 function closeFlyBox() { document.getElementById('flybox')?.classList.add('hidden'); }
 
 function populateLevelGroup() {
