@@ -110,6 +110,42 @@ const FLY_CONFIG = {
 };
 let selectedFly = 'fly';
 let catchCount = {};
+
+// ----------------------------------------------------------------------------
+// HATCHES — periodic bug emergence events. While a hatch is active, fish
+// key on the matching fly so the player who reads the water and picks the
+// right fly gets a big bonus. Surface rise rings visualize the hatch.
+// ----------------------------------------------------------------------------
+const HATCH_TYPES = [
+  { id: 'caddis', label: 'Caddis Hatch', emoji: '🦋',
+    fly: 'fly',
+    bonusSpecies: ['bluegill','pumpkinseed','greenSunfish','redbreastSunfish','spottedSunfish','rainbowTrout'],
+    bonusBiteRange: 12, bonusInterest: 50 },
+  { id: 'mayfly', label: 'Mayfly Hatch', emoji: '🪶',
+    fly: 'fly',
+    bonusSpecies: ['bluegill','rainbowTrout','brookTrout','brownTrout','cutthroatTrout'],
+    bonusBiteRange: 12, bonusInterest: 60 },
+  { id: 'midge', label: 'Midge Hatch', emoji: '🦟',
+    fly: 'nymph',
+    bonusSpecies: ['crappie','yellowPerch','brookTrout','rainbowTrout'],
+    bonusBiteRange: 8, bonusInterest: 40 },
+  { id: 'damsel', label: 'Damsel Hatch', emoji: '🪲',
+    fly: 'nymph',
+    bonusSpecies: ['bass','smallmouthBass','crappie','yellowPerch','brownTrout'],
+    bonusBiteRange: 14, bonusInterest: 70 },
+  { id: 'stone',  label: 'Stonefly Hatch', emoji: '🪲',
+    fly: 'nymph',
+    bonusSpecies: ['smallmouthBass','rainbowTrout','brownTrout','cutthroatTrout'],
+    bonusBiteRange: 14, bonusInterest: 70 },
+  { id: 'baitball', label: 'Baitfish Boil', emoji: '🐟',
+    fly: 'woolyBugger',
+    bonusSpecies: ['bass','smallmouthBass','chainPickerel','northernPike','brownTrout','cutthroatTrout'],
+    bonusBiteRange: 18, bonusInterest: 90 },
+];
+let currentHatch = null;       // { ...HATCH_TYPES[i], startedAt, endsAt }
+let nextHatchAt  = 0;          // frameCount when next hatch can begin
+const HATCH_DURATION_S = 70;   // ~70s per hatch
+const HATCH_GAP_S      = 100;  // ~100s of calm water between hatches (jittered)
 let lastCatchToast = null;        // { species, time } for brief on-screen popup
 let lastMissToast = null;         // { reason, time } when a fish escapes
 
@@ -153,7 +189,7 @@ const LEVELS = {
     species:   [
       'bluegill', 'pumpkinseed', 'crappie',
       'greenSunfish', 'redbreastSunfish', 'spottedSunfish',
-      'yellowPerch',
+      'yellowPerch', 'shiner',
       'bass', 'smallmouthBass', 'chainPickerel', 'northernPike',
     ],
     catches: {
@@ -168,7 +204,7 @@ const LEVELS = {
     },
     spawn: {
       bluegill: 50, pumpkinseed: 30, greenSunfish: 25, redbreastSunfish: 20, spottedSunfish: 20,
-      crappie: 35, yellowPerch: 30,
+      crappie: 35, yellowPerch: 30, shiner: 100,
       bass: 16, smallmouthBass: 10, chainPickerel: 5, northernPike: 2,
     },
     propCounts: { lilypads: 200, weeds: 700, cattails: 300, trees: 250, logs: 30, rocks: 110, snags: 40 },
@@ -216,7 +252,7 @@ const LEVELS = {
       bgClear:   [25, 32, 42],
     },
     treeStyle: 'pine',
-    species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout', 'yellowPerch'],
+    species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout', 'yellowPerch', 'shiner'],
     catches: {
       fly:         ['rainbowTrout'],
       nymph:       ['brookTrout', 'yellowPerch'],
@@ -228,7 +264,7 @@ const LEVELS = {
     },
     spawn: {
       rainbowTrout: 40, brookTrout: 30, brownTrout: 15, cutthroatTrout: 6,
-      yellowPerch: 25,
+      yellowPerch: 25, shiner: 70,
     },
     // Alpine: sparse pines, lots of exposed rock, snowcapped peaks scattered
     // across the surrounding terrain. No lilies/cattails.
@@ -1770,8 +1806,10 @@ function draw() {
 
   // ---- Derby HUD (timer + leaderboard) — only renders while a derby is live ----
   if (frameCount % 12 === 0) tickDerbyHud();
+  tickHatch();
 
   // ---- HUD updates (HTML overlay) ----
+  if (frameCount % 6 === 0) renderHatchHud();
   if (frameCount % 6 === 0) {
     let flyEl = document.getElementById('hud-fly');
     let moneyEl = document.getElementById('hud-money');
@@ -2692,6 +2730,25 @@ const SPECIES = {
     scareR: 240,             // a pike strike scatters everything nearby
     cooldownBase: 600,
     cooldownJitter: 720,
+  },
+
+  // ---- BAIT FISH (Phase 9) ----
+  // Tiny silvery forage fish — uncatchable (not in any level's catches),
+  // school very tightly near the surface, and act as visible prey for
+  // predators. They make the lake feel alive.
+  shiner: {
+    class: 'panfish',
+    sizeRange: [4, 6],
+    bodyAspect: 0.32,
+    maxSpeed: 1.4, maxForce: 0.040,
+    sepR: 6, neighR: 30, fleeR: 110,
+    sepW: 1.2, aliW: 2.0, cohW: 2.5, fleeW: 3.2,    // very tight schools
+    habitat: 'weeds', habitatW: 0.02,
+    depthBias: -0.001,
+    schoolWith: 'shiner',
+    depthAlpha: 240,
+    zRange: [0.02, 0.18],                            // surface-loving
+    baitfish: true,
   },
 
   // ---- ALPINE LAKE addition (Phase 7) ----
@@ -4257,12 +4314,20 @@ class FlyCast {
 
   _findBitingFish() {
     let cfg = this.cfg;
-    let bestD = cfg.biteRange;
+    // Hatch bonus: if a matching hatch is active AND we're throwing the
+    // matching fly, bite range extends. Reading the water and picking the
+    // right fly during a hatch is rewarded.
+    const hatchBonus = (currentHatch && currentHatch.fly === this.flyType) ? currentHatch.bonusBiteRange : 0;
+    let bestD = cfg.biteRange + hatchBonus;
     let best = null;
     // What does THIS fly type catch in the current level? Build a quick lookup.
     let levelCatches = lvl().catches[this.flyType] || [];
     let canCatch = Object.create(null);
     for (let sp of levelCatches) canCatch[sp] = true;
+    // During a matching hatch, additional species also key on the fly.
+    if (currentHatch && currentHatch.fly === this.flyType) {
+      for (let sp of currentHatch.bonusSpecies) canCatch[sp] = true;
+    }
     let spookedNow = (f) => f.spookedUntil && frameCount < f.spookedUntil;
     for (let f of panfish) {
       if (f.dead || f.hooked || spookedNow(f)) continue;
@@ -5737,6 +5802,89 @@ function drawProfilePreview() {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(s * 0.05, -s * 0.6); ctx.lineTo(s * 0.05, s * 0.6); ctx.stroke();
   ctx.restore();
+}
+
+// ============================================================================
+// Hatches (Phase 9) — periodic insect-emergence events. Spawn surface rise
+// ripples that visualize the hatch, and the matching fly gets a bite-range
+// + extra-species bonus inside FlyCast._findBitingFish.
+// ============================================================================
+// Debug helper — declared inside the module so currentHatch refers to the
+// top-level let, then exported on window so eval / devtools can hit it.
+function forceHatch(id) {
+  const h = id ? HATCH_TYPES.find(t => t.id === id) : HATCH_TYPES[Math.floor(Math.random() * HATCH_TYPES.length)];
+  if (!h) return;
+  currentHatch = { ...h, startedAt: frameCount, endsAt: frameCount + 60 * HATCH_DURATION_S };
+  flashHatchBanner(`${h.emoji} ${h.label} — try a ${FLY_CONFIG[h.fly].label}!`, 'in');
+}
+window.forceHatch = forceHatch;
+
+function tickHatch() {
+  // Spawn a few rise rings while a hatch is on so the surface looks alive.
+  if (currentHatch) {
+    if (frameCount > currentHatch.endsAt) {
+      flashHatchBanner(`${currentHatch.emoji} ${currentHatch.label} ending…`, 'fade');
+      currentHatch = null;
+      nextHatchAt = frameCount + 60 * (HATCH_GAP_S * 0.6 + Math.random() * HATCH_GAP_S * 0.8);
+      return;
+    }
+    // Frequency of rises ramps up mid-hatch then tapers — feels like the
+    // real bell curve of an emergence.
+    const t = (frameCount - currentHatch.startedAt) / (currentHatch.endsAt - currentHatch.startedAt);
+    const bell = 1 - Math.abs(t - 0.5) * 1.6;
+    const chance = Math.max(0.02, 0.25 * bell);
+    if (Math.random() < chance && lake) {
+      for (let i = 0; i < 1 + Math.floor(Math.random() * 2); i++) {
+        const p = lake.randomInteriorPoint();
+        if (p) ripples.push(new Ripple(p.x, p.y, 6 + Math.random() * 4));
+      }
+    }
+    return;
+  }
+  // Between hatches — wait, then kick one off.
+  if (nextHatchAt === 0) {
+    nextHatchAt = frameCount + 60 * (HATCH_GAP_S * 0.5 + Math.random() * HATCH_GAP_S * 0.8);
+    return;
+  }
+  if (frameCount >= nextHatchAt) {
+    const h = HATCH_TYPES[Math.floor(Math.random() * HATCH_TYPES.length)];
+    currentHatch = { ...h,
+      startedAt: frameCount,
+      endsAt:    frameCount + 60 * HATCH_DURATION_S,
+    };
+    flashHatchBanner(`${h.emoji} ${h.label} — try a ${FLY_CONFIG[h.fly].label}!`, 'in');
+  }
+}
+
+// Render a thin pinned banner at the top of the screen describing the
+// current hatch + remaining seconds. Cheap DOM update.
+function renderHatchHud() {
+  const el = document.getElementById('hatch-hud');
+  if (!el) return;
+  if (!currentHatch) { if (!el.classList.contains('hidden')) el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const remaining = Math.max(0, Math.round((currentHatch.endsAt - frameCount) / 60));
+  el.innerHTML = `<span class="emoji">${currentHatch.emoji}</span>` +
+    `<span class="lbl">${escapeHtmlGlobal(currentHatch.label)}</span>` +
+    `<span class="fly">${escapeHtmlGlobal(FLY_CONFIG[currentHatch.fly].label)}</span>` +
+    `<span class="sec">${remaining}s</span>`;
+}
+
+// One-off animated toast when a hatch begins / ends — uses the existing
+// catch-toast style. Just a quick fade.
+function flashHatchBanner(text, mode) {
+  let t = document.getElementById('hatch-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'hatch-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = text;
+  t.classList.remove('show');
+  // double-rAF so the transition picks up the new state
+  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
 // ============================================================================

@@ -126,6 +126,9 @@
     </div>
   </div>
 
+  <!-- Hatch HUD — pinned banner with the current insect emergence -->
+  <div id="hatch-hud" class="hidden"></div>
+
   <!-- Live derby event feed — "Mike landed a bass · +40" pops during a derby -->
   <div id="derby-feed"></div>
 
@@ -1214,6 +1217,61 @@
       #profile .profile-title { font-size: 19px; }
     }
 
+    /* ---- HATCH HUD (active hatch banner) ---- */
+    #hatch-hud {
+      position: fixed;
+      top: 90px; left: 50%; transform: translateX(-50%);
+      z-index: 11; pointer-events: none;
+      background: rgba(20, 35, 30, 0.85);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      border-radius: 999px;
+      padding: 6px 14px;
+      display: flex; align-items: center; gap: 10px;
+      font: 600 12px/1 -apple-system, system-ui, sans-serif;
+      color: rgba(220, 230, 240, 0.95);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      white-space: nowrap;
+    }
+    #hatch-hud.hidden { display: none; }
+    #hatch-hud .emoji { font-size: 18px; }
+    #hatch-hud .lbl   { color: rgba(255, 230, 150, 0.98); letter-spacing: 0.5px; }
+    #hatch-hud .fly   {
+      background: rgba(255, 220, 130, 0.18);
+      border: 1px solid rgba(255, 220, 130, 0.5);
+      color: rgba(255, 230, 150, 0.98);
+      border-radius: 5px; padding: 2px 8px;
+      font-size: 11px;
+    }
+    #hatch-hud .sec   {
+      font: 700 12px 'SF Mono', Menlo, monospace;
+      color: rgba(190, 230, 130, 0.95);
+    }
+    /* Mobile: tuck just under the slim derby strip when both are showing */
+    @media (pointer: coarse), (max-width: 720px) {
+      #hatch-hud { top: 38px; font-size: 11px; padding: 5px 10px; }
+      body.derby-live #hatch-hud { top: 38px; }
+      #hatch-hud .emoji { font-size: 14px; }
+    }
+
+    /* Hatch start/end flash toast */
+    #hatch-toast {
+      position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%) scale(0.96);
+      z-index: 12; pointer-events: none;
+      background: rgba(20, 35, 30, 0.92);
+      border: 2px solid rgba(255, 220, 130, 0.7);
+      border-radius: 12px;
+      padding: 12px 22px;
+      font: 700 18px/1 -apple-system, system-ui, sans-serif;
+      color: rgba(255, 230, 150, 0.98);
+      letter-spacing: 0.5px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    }
+    #hatch-toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
     /* ---- DERBY EVENT FEED (catches by everyone) ---- */
     #derby-feed {
       position: fixed;
@@ -1837,8 +1895,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=27"></script>
-  <script src="sprites.js?v=27"></script>
-  <script src="sketch.js?v=27"></script>
+  <script src="multiplayer.js?v=28"></script>
+  <script src="sprites.js?v=28"></script>
+  <script src="sketch.js?v=28"></script>
 </body>
 </html>
