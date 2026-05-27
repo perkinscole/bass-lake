@@ -2327,6 +2327,10 @@ function keyReleased() {
 
 function mouseWheel(event) {
   if (menuOpen) return;
+  // If any HTML modal is open, let the wheel scroll INSIDE that modal
+  // instead of zooming the world. Return true (don't preventDefault) so
+  // the page handles the scroll natively.
+  if (isAnyModalOpen()) return true;
   // zoom toward the mouse cursor so it stays anchored
   let mwx = mouseX / zoom + cam.x;
   let mwy = mouseY / zoom + cam.y;
@@ -2337,6 +2341,16 @@ function mouseWheel(event) {
     cam.y = mwy - mouseY / zoom;
     cam.x = constrain(cam.x, 0, WORLD_W - width / zoom);
     cam.y = constrain(cam.y, 0, WORLD_H - height / zoom);
+  }
+  return false;
+}
+
+// Any full-screen overlay that should swallow the scroll wheel.
+function isAnyModalOpen() {
+  const ids = ['flybox', 'profile', 'guide', 'shop', 'derby', 'derby-results', 'chat-menu'];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains('hidden')) return true;
   }
   return false;
 }
