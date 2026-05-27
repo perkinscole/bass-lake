@@ -779,7 +779,12 @@
     /* ---- TACKLE SHOP ---- */
     #shop {
       position: fixed; inset: 0;
-      background: rgba(10, 22, 18, 0.84);
+      background-color: rgba(10, 22, 18, 0.6);
+      background-image:
+        linear-gradient(rgba(10, 22, 18, 0.62), rgba(10, 22, 18, 0.82)),
+        url('images/tackle-shop-bg.png');
+      background-size: cover;
+      background-position: center;
       display: flex; align-items: center; justify-content: center;
       z-index: 110;
       backdrop-filter: blur(6px);
@@ -1895,8 +1900,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=28"></script>
-  <script src="sprites.js?v=28"></script>
-  <script src="sketch.js?v=28"></script>
+  <script src="multiplayer.js?v=29"></script>
+  <script src="sprites.js?v=29"></script>
+  <script src="sketch.js?v=29"></script>
 </body>
 </html>
