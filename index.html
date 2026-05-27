@@ -1264,6 +1264,14 @@
     }
 
     /* ---- SAMPLE NET RESULT PANEL ---- */
+    /* Auto-fade via CSS keyframes so the panel cannot get stuck "showing"
+       even if the tab was backgrounded during the lifetime. */
+    @keyframes sampleLife {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+      6%   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      90%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.98); pointer-events: none; }
+    }
     #sample-result {
       position: fixed;
       top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.96);
@@ -1278,9 +1286,20 @@
       box-shadow: 0 12px 40px rgba(0,0,0,0.6);
       backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
       opacity: 0; pointer-events: none;
-      transition: opacity 0.3s ease-out, transform 0.3s ease-out;
     }
-    #sample-result.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; cursor: pointer; }
+    #sample-result.show {
+      animation: sampleLife 6.5s ease-out forwards;
+      pointer-events: auto; cursor: pointer;
+    }
+    #sample-result .sample-close {
+      position: absolute; top: 6px; right: 8px;
+      background: none; border: none;
+      color: rgba(220, 230, 240, 0.7);
+      font: 22px/1 -apple-system, system-ui, sans-serif;
+      cursor: pointer; padding: 0 4px;
+      touch-action: manipulation;
+    }
+    #sample-result .sample-close:hover { color: rgba(255, 220, 130, 0.95); }
     #sample-result .sample-title {
       font: 700 16px/1 'Georgia', serif;
       color: rgba(255, 230, 150, 0.95);
@@ -2039,8 +2058,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=34"></script>
-  <script src="sprites.js?v=34"></script>
-  <script src="sketch.js?v=34"></script>
+  <script src="multiplayer.js?v=35"></script>
+  <script src="sprites.js?v=35"></script>
+  <script src="sketch.js?v=35"></script>
 </body>
 </html>

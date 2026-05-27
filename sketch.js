@@ -6281,13 +6281,31 @@ function showSampleResult(html) {
     el = document.createElement('div');
     el.id = 'sample-result';
     document.body.appendChild(el);
-    el.addEventListener('click', () => el.classList.remove('show'));
+    // Click anywhere on the panel (or its close button) to dismiss
+    el.addEventListener('click', () => hideSampleResult(el));
   }
-  el.innerHTML = html;
+  // Wrap the readout + a close button so the close click is unambiguous
+  el.innerHTML = `<button class="sample-close" aria-label="close">×</button>${html}`;
+  // Reset animation: remove 'show', force reflow, re-add 'show'. The
+  // pure-CSS @keyframes 'sampleLife' below auto-fades the panel after a
+  // fixed duration — no setTimeout that can be throttled in background
+  // tabs or get stuck.
   el.classList.remove('show');
-  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
-  clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => el.classList.remove('show'), 7000);
+  // Trigger reflow so removing + re-adding the class restarts the animation
+  // even if the element was already showing
+  void el.offsetWidth;
+  el.classList.add('show');
+  // Wire the close button after the innerHTML replace
+  el.querySelector('.sample-close')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideSampleResult(el);
+  });
+}
+
+function hideSampleResult(el) {
+  el = el || document.getElementById('sample-result');
+  if (!el) return;
+  el.classList.remove('show');
 }
 
 function tickHatch() {
