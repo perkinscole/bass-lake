@@ -5747,7 +5747,7 @@ function drawProfilePreview() {
 // the page stays readable on a phone.
 // ============================================================================
 
-const FIELD_GUIDE = [
+const FIELD_GUIDE_FISH = [
   {
     id: 'bluegill', name: 'Bluegill', latin: 'Lepomis macrochirus',
     size: '6–10 inches', lakes: 'Bass Lake',
@@ -5840,6 +5840,140 @@ const FIELD_GUIDE = [
   },
 ];
 
+// Birds you'll see on or above the lake. No pixel art yet, so the
+// portrait box uses a giant emoji as a placeholder.
+const FIELD_GUIDE_BIRDS = [
+  {
+    id: 'mallard', name: 'Mallard Duck', latin: 'Anas platyrhynchos',
+    icon: '🦆', size: '~22 inches', lakes: 'Bass Lake · Alpine Lake',
+    fact: 'The most widespread dabbling duck in the world. Drakes have an iridescent green head and yellow bill; hens are streaky brown for nest camouflage. Dabbles head-down in shallows for seeds, plants, and aquatic insects. Pairs in spring, broods follow the hen in single file.',
+  },
+  {
+    id: 'baldEagle', name: 'Bald Eagle', latin: 'Haliaeetus leucocephalus',
+    icon: '🦅', size: '~32 inches · 7 ft wingspan', lakes: 'Bass Lake · Alpine Lake',
+    fact: 'The continent\'s iconic raptor. Adults have a stark white head and tail; juveniles are mottled brown for the first 4-5 years. Soars on flat wings looking for fish near the surface — drops feet-first to snatch them. Pairs mate for life and reuse the same massive stick nest year after year.',
+  },
+  {
+    id: 'osprey', name: 'Osprey', latin: 'Pandion haliaetus',
+    icon: '🪶', size: '~24 inches', lakes: 'Bass Lake · Alpine Lake',
+    fact: 'The "fish hawk" — almost entirely piscivorous. Hovers 30-100 ft above the water, then folds its wings and plunges feet-first. Reversible outer toes and spiny pads on the feet grip slippery fish. Often carries the fish head-first to reduce drag.',
+  },
+  {
+    id: 'kingfisher', name: 'Belted Kingfisher', latin: 'Megaceryle alcyon',
+    icon: '🐦', size: '~13 inches', lakes: 'Bass Lake · Alpine Lake',
+    fact: 'Stocky, big-headed bird with a shaggy crest and a loud rattling call when flushed. Perches on overhanging branches, then dives headfirst for small fish. Females have a rust-colored belt across the chest — one of the few North American birds where the female is more colorful than the male.',
+  },
+  {
+    id: 'greatBlueHeron', name: 'Great Blue Heron', latin: 'Ardea herodias',
+    icon: '🪿', size: '~46 inches · 6 ft wingspan', lakes: 'Bass Lake',
+    fact: 'The largest North American heron. Stands motionless in shallow water for minutes at a time, then spears fish or frogs with a lightning thrust of its dagger-like bill. Flies with a slow deliberate wingbeat and a folded "S" neck.',
+  },
+  {
+    id: 'commonLoon', name: 'Common Loon', latin: 'Gavia immer',
+    icon: '🐦', size: '~30 inches', lakes: 'Alpine Lake',
+    fact: 'A signature voice of northern wilderness lakes — the eerie tremolo and yodel calls travel for miles. Loons are heavy-bodied with legs set far back on the body, perfect for underwater pursuit of fish. They can dive over 200 feet. Solid bones (uncommon in birds) give them dive ballast.',
+  },
+];
+
+// Plants in and around the lakes.
+const FIELD_GUIDE_PLANTS = [
+  {
+    id: 'waterLily', name: 'White Water Lily', latin: 'Nymphaea odorata',
+    icon: '🪷', size: 'Pad: 4–12 in across', lakes: 'Bass Lake',
+    fact: 'Floating pads anchored to the bottom by long flexible stalks. Pads create shaded cover that panfish (especially pumpkinseed and bluegill) hide under. White fragrant flowers open in the morning and close by mid-afternoon. Important nursery cover for small bass too.',
+  },
+  {
+    id: 'cattail', name: 'Common Cattail', latin: 'Typha latifolia',
+    icon: '🌾', size: '4–8 feet tall', lakes: 'Bass Lake',
+    fact: 'Tall reedy shoreline plant with the distinctive brown sausage-shaped flower spike. Forms dense stands at the water\'s edge that filter runoff, slow wave action, and shelter nesting birds. Roots, shoots, and pollen are all edible — sometimes called the "supermarket of the swamps."',
+  },
+  {
+    id: 'pondweed', name: 'Pondweed', latin: 'Potamogeton spp.',
+    icon: '🌿', size: 'Mats: ankle-deep to 12+ ft', lakes: 'Bass Lake · Alpine Lake',
+    fact: 'Submerged aquatic plants that grow in mats just under the surface. Provide oxygen, hide larval and juvenile fish, and host the aquatic insects that feed everything else. Heavy mats can choke navigation and indicate over-rich (eutrophic) water.',
+  },
+  {
+    id: 'milfoil', name: 'Eurasian Watermilfoil', latin: 'Myriophyllum spicatum',
+    icon: '⚠️', size: 'Up to 20 ft long', lakes: 'INVASIVE',
+    fact: 'Invasive submerged plant introduced from Europe and Asia. Spreads from broken fragments — a single boat trailered with milfoil to a new lake can start an infestation. Forms dense mats that crowd out native plants and degrade fishing. Wash boats and waders between lakes.',
+  },
+  {
+    id: 'whitePine', name: 'Eastern White Pine', latin: 'Pinus strobus',
+    icon: '🌲', size: '50–80 feet tall', lakes: 'Bass Lake',
+    fact: 'Soft long needles bundled in 5s — the only Eastern pine with this trait ("W-H-I-T-E" mnemonic). Towering tree of mature New England forests. Branches that hang out over water create classic largemouth bass cover from fallen tops and shaded edges.',
+  },
+  {
+    id: 'engelmannSpruce', name: 'Engelmann Spruce', latin: 'Picea engelmannii',
+    icon: '🌲', size: '70–115 feet tall', lakes: 'Alpine Lake',
+    fact: 'Dominant high-elevation conifer of the Rocky Mountains. Short stiff square needles all the way around the twig. Tolerates short cool summers and bitter winters; common at treeline. Wood is the favored material for spruce-top guitars and violins.',
+  },
+  {
+    id: 'redMaple', name: 'Red Maple', latin: 'Acer rubrum',
+    icon: '🍁', size: '40–60 feet tall', lakes: 'Bass Lake',
+    fact: 'One of the most abundant deciduous trees in eastern North America. Bright red flowers in early spring, red samaras in summer, and the show-stopping crimson fall color the species is named for. Frequently overhangs warmwater lakes and ponds.',
+  },
+];
+
+// Limnology — the science of inland waters. Concepts you'd see referenced
+// in a fisheries biology course.
+const FIELD_GUIDE_SCIENCE = [
+  {
+    id: 'thermocline', name: 'Thermocline', latin: 'Lake stratification',
+    icon: '🌡️', size: 'Typically 10–30 ft deep', lakes: 'Both lakes (summer)',
+    fact: 'The narrow depth zone in summer where water temperature drops sharply over just a few feet. Above it (the epilimnion) is warm and oxygen-rich; below it (the hypolimnion) is cold, dark, and oxygen-poor. Many fish stage right at the thermocline because food and oxygen are both available there.',
+  },
+  {
+    id: 'turnover', name: 'Lake Turnover', latin: 'Spring and fall mixing',
+    icon: '🔄', size: 'Whole-water-column event', lakes: 'Both lakes',
+    fact: 'Twice a year, when surface water reaches ~39°F (water\'s densest temp), the entire lake mixes top to bottom. This re-oxygenates the deep water and stirs up nutrients from the bottom. Fall turnover often coincides with a few days of poor fishing as the water "rolls."',
+  },
+  {
+    id: 'eutrophication', name: 'Eutrophication', latin: 'Nutrient loading',
+    icon: '🌊', size: 'Lake-wide gradual change', lakes: 'Especially Bass Lake',
+    fact: 'A lake\'s slow march from clear and oligotrophic (low nutrient) to murky and eutrophic (high nutrient). Lawn fertilizer, septic leakage, and shoreline development accelerate the process by decades. Symptoms: algal blooms, weed choking, fish kills, lost cold-water species.',
+  },
+  {
+    id: 'dissolvedOxygen', name: 'Dissolved Oxygen', latin: 'mg/L (ppm)',
+    icon: '💧', size: 'Trout: ≥5 ppm · Bass: ≥3 ppm', lakes: 'Both lakes',
+    fact: 'The oxygen molecules dissolved in water. Cold water holds more O₂ than warm water — that\'s why trout thrive in alpine lakes and die in warm ones. Plants make O₂ by day and consume it by night. Late summer "fish kills" usually happen at dawn after a warm cloudy week.',
+  },
+  {
+    id: 'invasive', name: 'Invasive Species', latin: 'Aquatic invaders',
+    icon: '⚠️', size: 'Microscopic to several feet', lakes: 'Both lakes',
+    fact: 'Non-native species that out-compete the native community. Common offenders: zebra mussels, Eurasian milfoil, rusty crayfish, snakehead, Asian carp. Always clean, drain, and dry your boat and waders between waters — a single fragment or hitchhiking larva can ruin a lake for decades.',
+  },
+  {
+    id: 'watershed', name: 'Watershed', latin: 'Drainage basin',
+    icon: '🗺️', size: 'Square miles to thousands', lakes: 'Both lakes',
+    fact: 'The total land area that drains into a lake. Everything that happens on the watershed — a logging cut, a road salt spread, a farm spill — eventually reaches the lake. Healthy watersheds with intact forests and wetlands act as giant filters that protect water quality.',
+  },
+  {
+    id: 'pH', name: 'pH & Alkalinity', latin: 'Acidity buffering',
+    icon: '🧪', size: 'Good water: pH 6.5–8.5', lakes: 'Both lakes',
+    fact: 'pH is the acidity of the water; alkalinity is its ability to resist pH change. Alpine lakes sitting on granite have low alkalinity and are vulnerable to acid rain. Limestone basins (bass-lake country) buffer themselves naturally and rarely swing.',
+  },
+  {
+    id: 'riparian', name: 'Riparian Buffer', latin: 'Shoreline zone',
+    icon: '🌿', size: '25–100 ft wide ideally', lakes: 'Both lakes',
+    fact: 'The strip of native vegetation along the shore. It filters runoff, holds the bank against erosion, shades the water, drops insect food into the lake, and provides nesting cover. Lakefront owners who mow to the water\'s edge degrade fisheries faster than almost anything else.',
+  },
+  {
+    id: 'foodWeb', name: 'Food Web', latin: 'Trophic cascade',
+    icon: '🔗', size: '4–5 trophic levels', lakes: 'Both lakes',
+    fact: 'Sunlight → algae and plants → zooplankton and aquatic insects → small fish (bluegill, perch, minnows) → predators (bass, pike, eagles). Remove one link — a chemical that kills bugs, a stocking that removes prey — and the whole web reshuffles, sometimes for years.',
+  },
+];
+
+// All categories — order here defines the tab order.
+const FIELD_GUIDE = {
+  fish:    { label: 'Fish',        entries: FIELD_GUIDE_FISH },
+  birds:   { label: 'Birds',       entries: FIELD_GUIDE_BIRDS },
+  plants:  { label: 'Plants',      entries: FIELD_GUIDE_PLANTS },
+  science: { label: 'Lake Science', entries: FIELD_GUIDE_SCIENCE },
+};
+const FIELD_GUIDE_CATEGORIES = Object.keys(FIELD_GUIDE);
+
+let guideCategory = 'fish';
 let guideIndex = 0;
 
 function wireFieldGuide() {
@@ -5857,12 +5991,17 @@ function wireFieldGuide() {
   closeBtn?.addEventListener('click', () => modal.classList.add('hidden'));
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 
+  // Active category's entries shortcut
+  function activeEntries() { return FIELD_GUIDE[guideCategory].entries; }
+
   prevBtn?.addEventListener('click', () => {
-    guideIndex = (guideIndex - 1 + FIELD_GUIDE.length) % FIELD_GUIDE.length;
+    const len = activeEntries().length;
+    guideIndex = (guideIndex - 1 + len) % len;
     renderGuide();
   });
   nextBtn?.addEventListener('click', () => {
-    guideIndex = (guideIndex + 1) % FIELD_GUIDE.length;
+    const len = activeEntries().length;
+    guideIndex = (guideIndex + 1) % len;
     renderGuide();
   });
 
@@ -5876,30 +6015,78 @@ function wireFieldGuide() {
     if (e.key === 'Escape')     { modal.classList.add('hidden'); }
   });
 
-  // Build the thumbnail strip once (it doesn't change)
-  const thumbs = document.getElementById('guide-thumbs');
-  if (thumbs) {
-    thumbs.innerHTML = FIELD_GUIDE.map((entry, i) =>
-      `<button class="guide-thumb" data-i="${i}" title="${escapeHtmlGlobal(entry.name)}">` +
-        `<img src="${escapeHtmlGlobal(speciesPortraits[entry.id] || '')}" alt="" />` +
-      `</button>`
+  // Category tab row
+  const tabs = document.getElementById('guide-tabs');
+  if (tabs) {
+    tabs.innerHTML = FIELD_GUIDE_CATEGORIES.map(cat =>
+      `<button class="guide-tab" data-cat="${cat}">${escapeHtmlGlobal(FIELD_GUIDE[cat].label)}</button>`
     ).join('');
-    thumbs.querySelectorAll('.guide-thumb').forEach(b => {
+    tabs.querySelectorAll('.guide-tab').forEach(b => {
       b.addEventListener('click', () => {
-        guideIndex = parseInt(b.dataset.i, 10) || 0;
+        guideCategory = b.dataset.cat;
+        guideIndex = 0;
+        buildGuideThumbs();
         renderGuide();
       });
     });
   }
+
+  buildGuideThumbs();
+}
+
+// Rebuild the thumbnail strip for the current category. Called when the
+// category changes (different entries) or on initial wire-up.
+function buildGuideThumbs() {
+  const thumbs = document.getElementById('guide-thumbs');
+  if (!thumbs) return;
+  const entries = FIELD_GUIDE[guideCategory].entries;
+  thumbs.innerHTML = entries.map((entry, i) => {
+    const portrait = speciesPortraits[entry.id];
+    const inner = portrait
+      ? `<img src="${escapeHtmlGlobal(portrait)}" alt="" />`
+      : `<span class="thumb-emoji">${escapeHtmlGlobal(entry.icon || '·')}</span>`;
+    return `<button class="guide-thumb" data-i="${i}" title="${escapeHtmlGlobal(entry.name)}">${inner}</button>`;
+  }).join('');
+  thumbs.querySelectorAll('.guide-thumb').forEach(b => {
+    b.addEventListener('click', () => {
+      guideIndex = parseInt(b.dataset.i, 10) || 0;
+      renderGuide();
+    });
+  });
 }
 
 function renderGuide() {
-  const e = FIELD_GUIDE[guideIndex];
+  const entries = FIELD_GUIDE[guideCategory].entries;
+  const e = entries[guideIndex];
   if (!e) return;
   const $ = (id) => document.getElementById(id);
-  const portrait = speciesPortraits[e.id] || '';
+
+  // Highlight active category tab
+  document.querySelectorAll('#guide-tabs .guide-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.cat === guideCategory);
+  });
+
+  // Portrait: image if we have one, otherwise the entry's emoji icon
+  const portrait = speciesPortraits[e.id];
+  const portraitWrap = document.querySelector('#guide .guide-portrait-wrap');
   const img = $('guide-portrait');
-  if (img) { img.src = portrait; img.alt = e.name; }
+  if (portrait && img) {
+    img.src = portrait; img.alt = e.name;
+    img.style.display = '';
+    if (portraitWrap) portraitWrap.querySelector('.guide-emoji')?.remove();
+  } else if (img) {
+    img.style.display = 'none';
+    if (portraitWrap) {
+      let emojiEl = portraitWrap.querySelector('.guide-emoji');
+      if (!emojiEl) {
+        emojiEl = document.createElement('div');
+        emojiEl.className = 'guide-emoji';
+        portraitWrap.appendChild(emojiEl);
+      }
+      emojiEl.textContent = e.icon || '📖';
+    }
+  }
+
   if ($('guide-name'))   $('guide-name').textContent  = e.name;
   if ($('guide-latin'))  $('guide-latin').textContent = e.latin;
   if ($('guide-meta'))   $('guide-meta').innerHTML =
@@ -5908,7 +6095,7 @@ function renderGuide() {
   if ($('guide-fact'))   $('guide-fact').textContent = e.fact;
   if ($('guide-flies'))  $('guide-flies').innerHTML  = (e.flies || [])
     .map(f => `<span class="guide-fly-chip">${escapeHtmlGlobal(f)}</span>`).join('');
-  if ($('guide-pageno')) $('guide-pageno').textContent = `${guideIndex + 1} / ${FIELD_GUIDE.length}`;
+  if ($('guide-pageno')) $('guide-pageno').textContent = `${guideIndex + 1} / ${entries.length}`;
   // Highlight current thumb + scroll it into view
   document.querySelectorAll('#guide-thumbs .guide-thumb').forEach((b, i) => {
     b.classList.toggle('active', i === guideIndex);

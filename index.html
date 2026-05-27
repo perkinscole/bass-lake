@@ -163,6 +163,8 @@
         <button id="guide-close-x" class="x" aria-label="close">×</button>
       </div>
 
+      <div id="guide-tabs" class="guide-tabs"></div>
+
       <div class="guide-body">
         <button id="guide-prev" class="guide-arrow" aria-label="previous">‹</button>
 
@@ -895,11 +897,42 @@
       touch-action: manipulation; }
     #guide .x:hover { color: rgba(255, 220, 130, 0.95); }
 
+    #guide .guide-tabs {
+      display: flex; gap: 5px;
+      margin-bottom: 12px;
+    }
+    #guide .guide-tab {
+      flex: 1;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255, 220, 130, 0.20);
+      color: rgba(220, 230, 240, 0.78);
+      border-radius: 7px; padding: 9px 6px;
+      font: 600 12px -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px; cursor: pointer;
+      touch-action: manipulation;
+    }
+    #guide .guide-tab.active {
+      background: rgba(255, 220, 130, 0.20);
+      color: rgba(255, 230, 150, 0.98);
+      border-color: rgba(255, 220, 130, 0.65);
+    }
+    #guide .guide-tab:hover { background: rgba(255, 220, 130, 0.10); }
     #guide .guide-body {
       display: grid;
       grid-template-columns: 40px 1fr 40px;
       gap: 10px;
       align-items: stretch;
+    }
+    #guide .guide-emoji {
+      font-size: 96px;
+      line-height: 1;
+      text-align: center;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.45));
+    }
+    #guide .thumb-emoji {
+      font-size: 22px;
+      line-height: 1;
+      display: inline-block;
     }
     #guide .guide-arrow {
       background: rgba(0,0,0,0.35);
@@ -1804,8 +1837,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=24"></script>
-  <script src="sprites.js?v=24"></script>
-  <script src="sketch.js?v=24"></script>
+  <script src="multiplayer.js?v=25"></script>
+  <script src="sprites.js?v=25"></script>
+  <script src="sketch.js?v=25"></script>
 </body>
 </html>
