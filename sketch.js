@@ -5836,8 +5836,12 @@ function pushDerbyFeed(playerName, species, weight, points) {
 // ============================================================================
 
 const QUICK_CHATS = [
-  'Nice!', 'Big one!', 'Lucky!', 'Lol',
-  'Hello', 'GG', 'GLHF', 'Where’s the fish?',
+  'FISH ON!',
+  "THERE'S WEIGHTS IN THE FISH!",
+  '67!',
+  'Bruh',
+  "It's called fishing not catching",
+  'SLAB',
 ];
 
 // Bubble timers per playerId. Map<playerId, { text, until }>
