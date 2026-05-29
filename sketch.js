@@ -2091,17 +2091,27 @@ function draw() {
     if (cast.state === 'done') cast = null;
   }
 
-  // aim reticle when no cast is active
-  if (!cast) {
+  // Aim reticle — shown when no cast is active, OR during the back-and-
+  // forth false-cast so mobile players dragging the cast button can see
+  // where the fly will land. (The cast button drag-aim writes the target
+  // into window.mouseX/Y; this reads the same vars.)
+  if (!cast || cast.state === 'aerial') {
     let wx = mouseX / zoom + cam.x;
     let wy = mouseY / zoom + cam.y;
     let onWater = lake.contains(wx, wy, 4);
+    let aiming = !!cast;
     noFill();
-    stroke(onWater ? 'rgba(255,240,180,0.7)' : 'rgba(220,80,60,0.6)');
-    strokeWeight(1);
-    ellipse(wx, wy, 12, 12);
-    line(wx - 5, wy, wx + 5, wy);
-    line(wx, wy - 5, wx, wy + 5);
+    stroke(onWater ? 'rgba(255,240,180,0.85)' : 'rgba(220,80,60,0.75)');
+    strokeWeight(aiming ? 1.6 : 1);
+    ellipse(wx, wy, aiming ? 18 : 12, aiming ? 18 : 12);
+    line(wx - 6, wy, wx + 6, wy);
+    line(wx, wy - 6, wx, wy + 6);
+    if (aiming) {
+      // Inner ring so the marker reads as a "lock-on" while charging
+      stroke(onWater ? 'rgba(255,240,180,0.45)' : 'rgba(220,80,60,0.4)');
+      strokeWeight(1);
+      ellipse(wx, wy, 32, 32);
+    }
     noStroke();
   }
 
