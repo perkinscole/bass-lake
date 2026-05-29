@@ -1280,10 +1280,11 @@ async function onLevelCardClick(id) {
   if (!playerState.levelsUnlocked[id]) {
     // try to buy the unlock with current money
     let cost = LEVELS[id].unlockCost || 0;
-    if (playerState.money < cost) {
-      // brief shake / feedback would be nice but for now just bail
-      return;
-    }
+    if (playerState.money < cost) return;
+    // Explicit confirmation — the user shouldn't accidentally spend $150
+    // just by clicking a level card.
+    const L = LEVELS[id];
+    if (!confirm(`Buy ${L.name} for $${cost}?\n\nYou currently have $${playerState.money}.`)) return;
     playerState.money -= cost;
     playerState.levelsUnlocked[id] = true;
     playSound('buy');
@@ -5866,8 +5867,14 @@ function wireQuickChat() {
   grid.querySelectorAll('.chat-msg').forEach(b => {
     b.addEventListener('click', () => {
       const text = b.dataset.msg;
-      if (window.MP && MP.sendChat) MP.sendChat(text);
+      // Close the menu FIRST so a slow Supabase send can't keep the modal
+      // open and visually freeze the game. Then defer the send by a tick
+      // so it runs after the close.
       closeMenu();
+      setTimeout(() => {
+        try { if (window.MP && MP.sendChat) MP.sendChat(text); }
+        catch (e) { console.warn('[chat] send threw:', e); }
+      }, 0);
     });
   });
 
@@ -5881,8 +5888,9 @@ function wireQuickChat() {
     if (menu.classList.contains('hidden')) return;
     const n = parseInt(e.key, 10);
     if (n >= 1 && n <= QUICK_CHATS.length) {
-      MP.sendChat(QUICK_CHATS[n - 1]);
-      closeMenu();
+      const msg = QUICK_CHATS[n - 1];
+      closeMenu();   // close FIRST so a slow send can't lock the UI
+      setTimeout(() => { try { MP.sendChat(msg); } catch (err) { console.warn(err); } }, 0);
     }
     if (e.key === 'Escape') closeMenu();
   });
@@ -6345,6 +6353,12 @@ function hideSampleResult(el) {
 }
 
 function tickHatch() {
+  // In a live multiplayer derby, the HOST decides when/where hatches start
+  // and broadcasts to everyone else. Non-host clients only render the
+  // current hatch + bugs locally; their own picker is suspended.
+  const inDerby = !!(window.MP && MP.currentDerby && MP.currentDerby.status === 'live');
+  const isHost  = inDerby && MP.currentDerby.host_id === MP.userId;
+
   if (currentHatch) {
     if (frameCount > currentHatch.endsAt) {
       currentHatch = null;
@@ -6416,6 +6430,8 @@ function tickHatch() {
   }
   // Between hatches — wait, then start one at a random water position.
   hatchBugs = [];
+  // Non-host in derby: stay quiet and wait for the host's broadcast.
+  if (inDerby && !isHost) return;
   if (nextHatchAt === 0) {
     nextHatchAt = frameCount + 60 * (HATCH_GAP_S * 0.5 + Math.random() * HATCH_GAP_S * 0.8);
     return;
@@ -6430,8 +6446,41 @@ function tickHatch() {
       startedAt: frameCount,
       endsAt:    frameCount + 60 * HATCH_DURATION_S,
     };
+    // Host: broadcast the chosen hatch so every peer sees the same one in
+    // the same place. Position/radius are sent as ints; duration in ms so
+    // a client's local frame-rate jitter doesn't desync the end time.
+    if (isHost && MP._lobbyCh) {
+      try {
+        MP._lobbyCh.send({
+          type: 'broadcast', event: 'hatch',
+          payload: {
+            id: h.id,
+            x: Math.round(center.x), y: Math.round(center.y),
+            r: Math.round(radius),
+            durationMs: HATCH_DURATION_S * 1000,
+          },
+        });
+      } catch (e) { console.warn('[MP] hatch broadcast failed:', e); }
+    }
   }
 }
+
+// Apply a hatch announced by the host. Starts at the receiver's current
+// frame so a few hundred ms of network latency is invisible; ends after
+// the host-specified duration converted back to frames.
+function applyRemoteHatch(p) {
+  if (!p || !p.id) return;
+  const type = HATCH_TYPES.find(h => h.id === p.id);
+  if (!type) return;
+  const durFrames = Math.max(60, Math.round((p.durationMs || HATCH_DURATION_S * 1000) / (1000 / 60)));
+  currentHatch = { ...type,
+    x: p.x, y: p.y, r: p.r,
+    startedAt: frameCount,
+    endsAt:    frameCount + durFrames,
+  };
+  hatchBugs = [];
+}
+window.applyRemoteHatch = applyRemoteHatch;
 
 // Pick a point inside the hatch radius (over water). Tries a few times in
 // case the center+radius slops over land.

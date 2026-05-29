@@ -368,6 +368,14 @@ MP._subscribeLobby = async function (derbyId) {
   );
   ch.on('broadcast', { event: 'pos' },  MP._handlePos);
   ch.on('broadcast', { event: 'chat' }, MP._handleChat);
+  // Hatch sync — host announces a hatch, every other client mirrors it.
+  ch.on('broadcast', { event: 'hatch' }, (raw) => {
+    const p = raw && raw.payload;
+    if (!p) return;
+    if (typeof window.applyRemoteHatch === 'function') {
+      try { window.applyRemoteHatch(p); } catch (e) { console.warn('[MP] applyRemoteHatch:', e); }
+    }
+  });
   await ch.subscribe();
   MP._lobbyCh = ch;
   await MP._refreshRoster();
@@ -589,13 +597,18 @@ window.addEventListener('beforeunload', () => {
 });
 
 MP.sendChat = function (text) {
-  if (!MP._lobbyCh || !MP.currentDerby) return;
-  text = String(text || '').slice(0, 40);
-  if (!text) return;
-  const msg = { id: MP.userId, name: MP.getPlayerName(), text };
-  MP._lobbyCh.send({ type: 'broadcast', event: 'chat', payload: msg });
-  // Echo to ourselves so the bubble appears over our own kayak too
-  for (const fn of MP._chatListeners) { try { fn(msg); } catch (e) { console.warn(e); } }
+  try {
+    if (!MP._lobbyCh || !MP.currentDerby) return;
+    text = String(text || '').slice(0, 40);
+    if (!text) return;
+    const msg = { id: MP.userId, name: MP.getPlayerName(), text };
+    // Echo locally FIRST so the bubble appears immediately, even if the
+    // network round-trip stalls.
+    for (const fn of MP._chatListeners) { try { fn(msg); } catch (e) { console.warn(e); } }
+    try {
+      MP._lobbyCh.send({ type: 'broadcast', event: 'chat', payload: msg });
+    } catch (sendErr) { console.warn('[MP] chat broadcast failed:', sendErr); }
+  } catch (e) { console.warn('[MP] sendChat threw:', e); }
 };
 
 // ---------------------------------------------------------------------------
