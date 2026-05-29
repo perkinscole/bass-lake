@@ -5666,7 +5666,16 @@ function enterDerbyWorld(d) {
 
   document.getElementById('derby')?.classList.add('hidden');
   document.getElementById('menu')?.classList.add('hidden');
-  document.getElementById('derby-hud')?.classList.remove('hidden');
+  const hud = document.getElementById('derby-hud');
+  hud?.classList.remove('hidden');
+  hud?.classList.remove('expanded');
+  // Tap the slim mobile strip to expand to a full board; tap again to
+  // collapse. Wire just once per derby start (replaces any previous
+  // listener via the dataset flag).
+  if (hud && !hud.dataset.tapBound) {
+    hud.addEventListener('click', () => hud.classList.toggle('expanded'));
+    hud.dataset.tapBound = '1';
+  }
   document.getElementById('chat-btn')?.classList.remove('hidden');
   // body class drives mobile-only CSS (hide regular HUD, etc.)
   document.body.classList.add('derby-live');
