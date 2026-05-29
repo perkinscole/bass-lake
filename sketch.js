@@ -120,26 +120,69 @@ let catchCount = {};
 // ----------------------------------------------------------------------------
 const FLY_PATTERNS = {
   fly: [
-    { id: 'adams',          label: 'Adams',           img: 'images/adams-dry-fly.png', hatches: ['mayfly'],          desc: 'Classic mayfly dun' },
-    { id: 'elkHairCaddis',  label: 'Elk Hair Caddis', img: null,                        hatches: ['caddis'],          desc: 'Skitters like a caddis' },
-    { id: 'griffithsGnat',  label: "Griffith's Gnat", img: null,                        hatches: ['midge'],           desc: 'Tiny midge cluster' },
-    { id: 'parachuteAdams', label: 'Parachute Adams', img: null,                        hatches: ['mayfly'],          desc: 'Low-riding all-purpose dun' },
+    // Adams is the DEFAULT — free, infinite, but its `customCatches` (the
+    // restrictedCatches helper below) limits it to bluegill + pumpkinseed
+    // only. Buy fancier dry flies to catch the other sunfish + trout.
+    { id: 'adams',          label: 'Adams',           img: 'images/adams-dry-fly.png', hatches: ['mayfly'],          desc: 'Classic mayfly dun',          price: 0, isDefault: true,
+      customCatches: ['bluegill', 'pumpkinseed'] },
+    { id: 'elkHairCaddis',  label: 'Elk Hair Caddis', img: null,                        hatches: ['caddis'],          desc: 'Skitters like a caddis',      price: 3 },
+    { id: 'griffithsGnat',  label: "Griffith's Gnat", img: null,                        hatches: ['midge'],           desc: 'Tiny midge cluster',          price: 3 },
+    { id: 'parachuteAdams', label: 'Parachute Adams', img: null,                        hatches: ['mayfly'],          desc: 'Low-riding all-purpose dun',  price: 3 },
   ],
   nymph: [
-    { id: 'princeNymph',    label: 'Prince Nymph',    img: 'images/prince-nymph.png',  hatches: ['mayfly','stone'],  desc: 'Attractor with biot wings' },
-    { id: 'pheasantTail',   label: 'Pheasant Tail',   img: null,                        hatches: ['mayfly'],          desc: 'Universal mayfly nymph' },
-    { id: 'haresEar',       label: "Hare's Ear",      img: null,                        hatches: ['caddis','mayfly'], desc: 'Buggy and impressionistic' },
-    { id: 'zebraMidge',     label: 'Zebra Midge',     img: null,                        hatches: ['midge'],           desc: 'Tiny chironomid pupa' },
-    { id: 'damselNymph',    label: 'Damsel Nymph',    img: null,                        hatches: ['damsel'],          desc: 'Slender weed-bed prowler' },
-    { id: 'stoneflyNymph',  label: 'Stonefly Nymph',  img: null,                        hatches: ['stone'],           desc: 'Big rubber-leg pattern' },
+    { id: 'princeNymph',    label: 'Prince Nymph',    img: 'images/prince-nymph.png',  hatches: ['mayfly','stone'],  desc: 'Attractor with biot wings',   price: 4 },
+    { id: 'pheasantTail',   label: 'Pheasant Tail',   img: null,                        hatches: ['mayfly'],          desc: 'Universal mayfly nymph',      price: 4 },
+    { id: 'haresEar',       label: "Hare's Ear",      img: null,                        hatches: ['caddis','mayfly'], desc: 'Buggy and impressionistic',   price: 4 },
+    { id: 'zebraMidge',     label: 'Zebra Midge',     img: null,                        hatches: ['midge'],           desc: 'Tiny chironomid pupa',        price: 5 },
+    { id: 'damselNymph',    label: 'Damsel Nymph',    img: null,                        hatches: ['damsel'],          desc: 'Slender weed-bed prowler',    price: 5 },
+    { id: 'stoneflyNymph',  label: 'Stonefly Nymph',  img: null,                        hatches: ['stone'],           desc: 'Big rubber-leg pattern',      price: 5 },
   ],
   woolyBugger: [
-    { id: 'woolyBugger',    label: 'Wooly Bugger',    img: 'images/woolly-bugger.png', hatches: ['baitball'],        desc: 'Imitates leeches + small fish' },
-    { id: 'clouserMinnow',  label: 'Clouser Minnow',  img: null,                        hatches: ['baitball'],        desc: 'Dumbbell eyes ride point-up' },
-    { id: 'muddlerMinnow',  label: 'Muddler Minnow',  img: null,                        hatches: [],                  desc: 'Spun deer-hair sculpin head' },
-    { id: 'zonker',         label: 'Zonker',          img: null,                        hatches: ['baitball'],        desc: 'Rabbit-strip baitfish' },
+    { id: 'woolyBugger',    label: 'Wooly Bugger',    img: 'images/woolly-bugger.png', hatches: ['baitball'],        desc: 'Imitates leeches + small fish', price: 7 },
+    { id: 'clouserMinnow',  label: 'Clouser Minnow',  img: null,                        hatches: ['baitball'],        desc: 'Dumbbell eyes ride point-up',   price: 9 },
+    { id: 'muddlerMinnow',  label: 'Muddler Minnow',  img: null,                        hatches: [],                  desc: 'Spun deer-hair sculpin head',   price: 9 },
+    { id: 'zonker',         label: 'Zonker',          img: null,                        hatches: ['baitball'],        desc: 'Rabbit-strip baitfish',         price: 9 },
   ],
 };
+// All patterns in one flat array — handy for lookups by id without
+// caring which category they belong to.
+const ALL_PATTERNS = Object.values(FLY_PATTERNS).flat();
+function findPattern(id) { return ALL_PATTERNS.find(p => p.id === id); }
+function patternCategory(id) {
+  for (const [cat, list] of Object.entries(FLY_PATTERNS)) {
+    if (list.some(p => p.id === id)) return cat;
+  }
+  return null;
+}
+
+// ----------------------------------------------------------------------------
+// FLY STOCK — how many of each pattern the player owns. The default Adams
+// stores the string 'inf' (JSON can't serialize Infinity) and getFlyStock
+// returns the real number. Stock decreases when the line snaps. Empty
+// stock => can't be selected; trySelectFly falls back to Adams.
+// ----------------------------------------------------------------------------
+function getFlyStock(id) {
+  const p = findPattern(id);
+  if (p && p.isDefault) return Infinity;
+  const raw = (playerState.flyStock && playerState.flyStock[id]) ?? 0;
+  return raw === 'inf' ? Infinity : Number(raw) || 0;
+}
+function setFlyStock(id, n) {
+  playerState.flyStock = playerState.flyStock || {};
+  const p = findPattern(id);
+  if (p && p.isDefault) { playerState.flyStock[id] = 'inf'; return; }
+  playerState.flyStock[id] = Math.max(0, Math.floor(n));
+}
+function addFlyStock(id, qty = 1) {
+  if (qty <= 0) return;
+  setFlyStock(id, getFlyStock(id) + qty);
+}
+function decFlyStock(id, qty = 1) {
+  const cur = getFlyStock(id);
+  if (cur === Infinity) return; // default flies don't deplete
+  setFlyStock(id, cur - qty);
+}
+function hasFlyStock(id) { return getFlyStock(id) > 0; }
 // Active pattern within each category. Persisted to localStorage so the
 // player's selection survives reloads.
 let selectedPatterns = { fly: 'adams', nymph: 'princeNymph', woolyBugger: 'woolyBugger' };
@@ -362,6 +405,11 @@ let playerState = {
     kayak: 1,       // 1, 2, 3 — gates paddle speed
     sonar: false,
   },
+  // Fly stock — see getFlyStock() above. Initialized with the default fly
+  // pre-set to infinite; grandfatherFlyStock() tops up the headliner for
+  // each previously-unlocked category on first boot after this update.
+  flyStock: { adams: 'inf' },
+  flyStockGrandfathered: false,
 };
 const ROD_RANGES   = { 1: 220, 2: 350, 3: 480 };
 const KAYAK_SPEEDS = { 1: 1.0, 2: 1.3, 3: 1.6 };
@@ -423,7 +471,11 @@ function saveProgress() {
       money:           playerState.money,
       level_current:   playerState.level,
       levels_unlocked: playerState.levelsUnlocked,
-      unlocks:         playerState.unlocks,
+      // Fly stock + grandfather flag piggyback inside the unlocks JSON
+      // column so we don't need a schema migration.
+      unlocks:         { ...playerState.unlocks,
+                         flyStock: playerState.flyStock,
+                         flyStockGrandfathered: playerState.flyStockGrandfathered },
       stats:           playerStats,
       display_name:    MP.getPlayerName(),
       hull_color:      playerAppearance.hull,
@@ -446,10 +498,26 @@ function loadProgress() {
         if (parsed.unlocks.kayak != null) playerState.unlocks.kayak = parsed.unlocks.kayak;
         if (parsed.unlocks.sonar != null) playerState.unlocks.sonar = parsed.unlocks.sonar;
       }
-      if (parsed.sonarHidden != null) playerState.sonarHidden = parsed.sonarHidden;
+      if (parsed.sonarHidden != null)  playerState.sonarHidden = parsed.sonarHidden;
+      if (parsed.flyStock)             playerState.flyStock = parsed.flyStock;
+      if (parsed.flyStockGrandfathered) playerState.flyStockGrandfathered = parsed.flyStockGrandfathered;
     }
     currentLevel = playerState.level || 'bassLake';
   } catch {}
+  grandfatherFlyStock();
+}
+
+// One-time migration: players who had a fly category unlocked before the
+// fly-economy update get a stock of the headliner pattern to compensate.
+// Runs only once per profile (gated by playerState.flyStockGrandfathered).
+function grandfatherFlyStock() {
+  if (playerState.flyStockGrandfathered) return;
+  playerState.flyStock = playerState.flyStock || {};
+  playerState.flyStock.adams = 'inf';
+  // 10x headliner per category they already paid to unlock
+  if (playerState.unlocks?.flies?.nymph)       addFlyStock('princeNymph', 10);
+  if (playerState.unlocks?.flies?.woolyBugger) addFlyStock('woolyBugger', 10);
+  playerState.flyStockGrandfathered = true;
 }
 
 // Merge a freshly-fetched cloud profile into the local playerState +
@@ -465,11 +533,17 @@ function applyCloudProfile(p) {
   }
   if (p.levels_unlocked) Object.assign(playerState.levelsUnlocked, p.levels_unlocked);
   if (p.unlocks) {
-    if (p.unlocks.flies)             Object.assign(playerState.unlocks.flies, p.unlocks.flies);
-    if (p.unlocks.rod   != null)     playerState.unlocks.rod   = p.unlocks.rod;
-    if (p.unlocks.kayak != null)     playerState.unlocks.kayak = p.unlocks.kayak;
-    if (p.unlocks.sonar != null)     playerState.unlocks.sonar = p.unlocks.sonar;
+    if (p.unlocks.flies)                 Object.assign(playerState.unlocks.flies, p.unlocks.flies);
+    if (p.unlocks.rod   != null)         playerState.unlocks.rod   = p.unlocks.rod;
+    if (p.unlocks.kayak != null)         playerState.unlocks.kayak = p.unlocks.kayak;
+    if (p.unlocks.sonar != null)         playerState.unlocks.sonar = p.unlocks.sonar;
+    // Fly economy fields piggybacked inside unlocks JSON
+    if (p.unlocks.flyStock)              playerState.flyStock = p.unlocks.flyStock;
+    if (p.unlocks.flyStockGrandfathered) playerState.flyStockGrandfathered = p.unlocks.flyStockGrandfathered;
   }
+  // Run the grandfather migration after merging cloud state too — covers
+  // brand-new sign-ins where loadProgress saw an empty localStorage.
+  grandfatherFlyStock();
   if (p.stats && typeof p.stats === 'object') {
     Object.assign(playerStats, p.stats);
   }
