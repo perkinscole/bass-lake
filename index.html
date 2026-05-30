@@ -33,6 +33,13 @@
   </style>
 </head>
 <body>
+  <!-- Studio splash — shown once per page load before the menu appears.
+       Click anywhere (or wait ~2.6s) to dismiss. -->
+  <div id="studio-splash">
+    <img class="studio-splash-logo" src="images/lilbrostudioslogo.png" alt="Lil Bro Studios" />
+    <div class="studio-splash-presents">presents</div>
+  </div>
+
   <div id="hud">
     <div id="hud-controls">
       W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly · ESC menu
@@ -331,6 +338,47 @@
     </div>
   </div>
   <style>
+    /* ---- STUDIO SPLASH ---- */
+    #studio-splash {
+      position: fixed; inset: 0;
+      background: #0a1410;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 18px;
+      z-index: 9999;
+      cursor: pointer;
+      animation: studioSplashLife 2800ms ease-in-out forwards;
+    }
+    #studio-splash .studio-splash-logo {
+      max-width: min(72vw, 520px);
+      max-height: 60vh;
+      object-fit: contain;
+      opacity: 0;
+      transform: scale(0.96);
+      animation: studioLogoIn 700ms ease-out 200ms forwards;
+      filter: drop-shadow(0 6px 24px rgba(0, 0, 0, 0.55));
+    }
+    #studio-splash .studio-splash-presents {
+      color: rgba(220, 230, 240, 0.55);
+      font: italic 14px/1 -apple-system, system-ui, sans-serif;
+      letter-spacing: 4px;
+      text-transform: lowercase;
+      opacity: 0;
+      animation: studioLogoIn 700ms ease-out 600ms forwards;
+    }
+    #studio-splash.dismiss { animation: studioSplashOut 350ms ease-out forwards; }
+    @keyframes studioLogoIn {
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes studioSplashLife {
+      0%   { opacity: 1; }
+      85%  { opacity: 1; }
+      100% { opacity: 0; visibility: hidden; pointer-events: none; }
+    }
+    @keyframes studioSplashOut {
+      to { opacity: 0; visibility: hidden; pointer-events: none; }
+    }
+
     #hud {
       position: fixed; top: 8px; left: 10px;
       color: rgba(220, 230, 240, 0.7);
@@ -600,31 +648,32 @@
       font-size: 15px;
     }
 
-    /* "a game by [logo]" footer — subtle, centered, sits below Cast Off. */
+    /* "a game by [logo]" footer — sits below Cast Off as a permanent credit. */
     #menu .studio-credit {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      margin-top: 14px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(255, 220, 130, 0.15);
-      opacity: 0.72;
+      gap: 12px;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 220, 130, 0.18);
     }
     #menu .studio-credit-label {
-      color: rgba(220, 230, 240, 0.55);
-      font: italic 11px/1 -apple-system, system-ui, sans-serif;
-      letter-spacing: 0.5px;
+      color: rgba(220, 230, 240, 0.7);
+      font: italic 13px/1 -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.6px;
     }
     #menu .studio-credit img {
-      height: 32px;
+      height: 56px;
       width: auto;
       object-fit: contain;
       image-rendering: -webkit-optimize-contrast;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
     }
     @media (pointer: coarse), (max-width: 720px) {
-      #menu .studio-credit { margin-top: 10px; padding-top: 8px; }
-      #menu .studio-credit img { height: 26px; }
+      #menu .studio-credit { margin-top: 12px; padding-top: 10px; gap: 10px; }
+      #menu .studio-credit img { height: 44px; }
+      #menu .studio-credit-label { font-size: 12px; }
     }
 
     #menu .fly-card.locked {
@@ -2330,8 +2379,31 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=57"></script>
-  <script src="sprites.js?v=57"></script>
-  <script src="sketch.js?v=57"></script>
+  <script src="multiplayer.js?v=58"></script>
+  <script src="sprites.js?v=58"></script>
+  <script src="sketch.js?v=58"></script>
+  <script>
+    // Studio splash — click or tap to skip; otherwise auto-dismisses via
+    // the CSS animation after ~2.6s. Remove from DOM after fade so it
+    // never blocks input.
+    (function () {
+      const splash = document.getElementById('studio-splash');
+      if (!splash) return;
+      let removed = false;
+      const remove = () => { if (removed) return; removed = true; splash.remove(); };
+      const dismiss = () => {
+        if (removed) return;
+        splash.classList.add('dismiss');
+        setTimeout(remove, 400);
+      };
+      splash.addEventListener('click', dismiss);
+      splash.addEventListener('touchstart', dismiss, { passive: true });
+      splash.addEventListener('animationend', (e) => {
+        if (e.animationName === 'studioSplashLife' || e.animationName === 'studioSplashOut') remove();
+      });
+      // Safety net — if CSS animations are disabled / blocked, still clear it.
+      setTimeout(remove, 4000);
+    })();
+  </script>
 </body>
 </html>
