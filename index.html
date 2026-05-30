@@ -116,6 +116,10 @@
         <button id="derby-button" class="secondary">Multiplayer</button>
         <button id="start-button">Cast Off</button>
       </div>
+      <div class="studio-credit">
+        <span class="studio-credit-label">a game by</span>
+        <img src="images/lilbrostudioslogo.png" alt="Lil Bro Studios" />
+      </div>
     </div>
   </div>
 
@@ -594,6 +598,33 @@
       grid-column: 1 / -1;
       padding: 14px;
       font-size: 15px;
+    }
+
+    /* "a game by [logo]" footer — subtle, centered, sits below Cast Off. */
+    #menu .studio-credit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 220, 130, 0.15);
+      opacity: 0.72;
+    }
+    #menu .studio-credit-label {
+      color: rgba(220, 230, 240, 0.55);
+      font: italic 11px/1 -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.5px;
+    }
+    #menu .studio-credit img {
+      height: 32px;
+      width: auto;
+      object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
+    }
+    @media (pointer: coarse), (max-width: 720px) {
+      #menu .studio-credit { margin-top: 10px; padding-top: 8px; }
+      #menu .studio-credit img { height: 26px; }
     }
 
     #menu .fly-card.locked {
@@ -2299,8 +2330,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=56"></script>
-  <script src="sprites.js?v=56"></script>
-  <script src="sketch.js?v=56"></script>
+  <script src="multiplayer.js?v=57"></script>
+  <script src="sprites.js?v=57"></script>
+  <script src="sketch.js?v=57"></script>
 </body>
 </html>
