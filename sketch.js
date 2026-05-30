@@ -427,14 +427,19 @@ const REWARDS = {
 // were retired when the fly economy started selling individual patterns.
 const SHOP_ITEMS = [
   { id: 'rod2',   cost: 60,  label: 'Mid-grade rod', desc: 'Longer cast (350ft max)',
+    img: 'images/mid-grade-rod.png',
     check: s => s.unlocks.rod < 2,   apply: s => { s.unlocks.rod = 2; } },
   { id: 'kayak2', cost: 80,  label: 'Faster kayak',  desc: '+30% paddle speed',
+    img: 'images/faster-kayak.png',
     check: s => s.unlocks.kayak < 2, apply: s => { s.unlocks.kayak = 2; } },
   { id: 'sonar',  cost: 200, label: 'Fish finder',   desc: 'Side-view sonar display',
+    img: 'images/fish-finder.png',
     check: s => !s.unlocks.sonar,    apply: s => { s.unlocks.sonar = true; } },
   { id: 'rod3',   cost: 250, label: 'Pro rod',       desc: 'Maximum cast (480ft)',
+    img: 'images/pro-rod.png',
     check: s => s.unlocks.rod < 3,   apply: s => { s.unlocks.rod = 3; } },
   { id: 'kayak3', cost: 350, label: 'Sea kayak',     desc: '+60% paddle speed',
+    img: 'images/sea-kayak.png',
     check: s => s.unlocks.kayak < 3, apply: s => { s.unlocks.kayak = 3; } },
 ];
 
@@ -1430,14 +1435,17 @@ function populateShop() {
   }
 
   // Gear section: rod / kayak / sonar tiers — owned items grey out.
+  // Same card layout as flies (image + info + price + buy button).
   const gearHtml = SHOP_ITEMS.map(item => {
     const owned = !item.check(playerState);
     const canAfford = playerState.money >= item.cost;
     const dis = owned || !canAfford;
+    const img = item.img ? `<img src="${escapeHtmlGlobal(item.img)}" alt="">` : '';
     return `<div class="shop-item${owned ? ' owned' : ''}">
+      <div class="shop-item-img">${img}</div>
       <div class="info">
-        <div class="name">${item.label}</div>
-        <div class="desc">${item.desc}</div>
+        <div class="name">${escapeHtmlGlobal(item.label)}</div>
+        <div class="desc">${escapeHtmlGlobal(item.desc)}</div>
       </div>
       <div class="price">$${item.cost}</div>
       <button data-id="${item.id}" ${dis ? 'disabled' : ''}>${owned ? 'Owned' : 'Buy'}</button>

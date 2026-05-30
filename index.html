@@ -952,6 +952,18 @@
       border-radius: 8px;
       padding: 10px 14px;
     }
+    #shop .shop-item-img {
+      width: 56px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    #shop .shop-item-img img {
+      max-width: 100%; max-height: 100%;
+      image-rendering: pixelated;
+    }
+    @media (pointer: coarse), (max-width: 720px) {
+      #shop .shop-item-img { width: 48px; height: 36px; }
+    }
     #shop .shop-item .info { flex: 1; }
     #shop .shop-item .name {
       color: rgba(255, 230, 150, 0.95);
@@ -2266,8 +2278,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=49"></script>
-  <script src="sprites.js?v=49"></script>
-  <script src="sketch.js?v=49"></script>
+  <script src="multiplayer.js?v=50"></script>
+  <script src="sprites.js?v=50"></script>
+  <script src="sketch.js?v=50"></script>
 </body>
 </html>
