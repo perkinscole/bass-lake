@@ -7088,7 +7088,7 @@ const FIELD_GUIDE_INSECTS = [
   },
   {
     id: 'dragonfly', name: 'Dragonfly Nymph', latin: 'Suborder Anisoptera',
-    icon: '🪲', size: '25–50 mm long', lakes: 'Both lakes · silty bottoms',
+    img: 'images/dragonfly-nymph.png', icon: '🪲', size: '25–50 mm long', lakes: 'Both lakes · silty bottoms',
     fact: 'The damselfly\'s stocky, bulldog cousin. Hunts small fish and other insects on the bottom, then jets forward by squirting water from its abdomen. Dragonfly nymphs are the biggest single insect meal in many lakes — big trout, bass, and pike all key on them. The hatch is theatrical: nymphs crawl out on emergent plants and split open to release the adult.',
     flies: ['Nymph', 'Wooly Bugger'],
   },
