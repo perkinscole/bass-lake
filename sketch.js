@@ -2399,7 +2399,38 @@ function toggleMenu() {
 }
 
 function trySelectFly(name) {
-  if (playerState.unlocks.flies[name]) selectedFly = name;
+  if (!playerState.unlocks.flies[name]) return;
+  // Fly economy: if the active pattern in this category has 0 stock,
+  // shift selection to the first pattern that DOES have stock. If none,
+  // bounce back to Adams (the default).
+  selectedFly = name;
+  const cur = selectedPatterns[name];
+  if (!hasFlyStock(cur)) {
+    const replacement = (FLY_PATTERNS[name] || []).find(p => hasFlyStock(p.id));
+    if (replacement) {
+      setPattern(name, replacement.id);
+    } else {
+      selectedFly = 'fly';
+      setPattern('fly', 'adams');
+      showSnapToast(`Out of ${findPattern(cur)?.label || 'flies'} — switched to Adams`);
+    }
+  }
+}
+
+// Lightweight bottom-of-screen toast for fly-economy events (snap,
+// fallback to Adams, etc.). Pure CSS fade so it cannot get stuck.
+function showSnapToast(text) {
+  let el = document.getElementById('snap-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'snap-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.remove('show');
+  // Force reflow so re-adding the class restarts the animation
+  void el.offsetWidth;
+  el.classList.add('show');
 }
 function keyReleased() {
   if (keyCode === LEFT_ARROW || key === 'a' || key === 'A') keys.left = false;
@@ -4877,6 +4908,25 @@ class FlyCast {
     lastMissToast = { reason: 'snap', time: frameCount };
     playSound('snap');
     stopLoop('reel_loop');
+    // Fly economy: snap takes the fly with it. Default Adams is infinite
+    // so this is a no-op for the starter pattern. Toast shows what was
+    // lost + remaining stock.
+    const lostPattern = this.pattern;
+    if (lostPattern && !lostPattern.isDefault) {
+      decFlyStock(lostPattern.id);
+      const left = getFlyStock(lostPattern.id);
+      const msg  = left > 0
+        ? `Snap! Lost 1 ${lostPattern.label} (${left} left)`
+        : `Snap! Lost your last ${lostPattern.label}`;
+      showSnapToast(msg);
+      saveProgress();
+      // Empty stock = auto-fallback to Adams so the next cast doesn't try
+      // to tie on a pattern the player no longer has.
+      if (left === 0) {
+        setPattern('fly', 'adams');
+        if (selectedFly !== 'fly') trySelectFly('fly');
+      }
+    }
     this.state = 'done';
   }
 

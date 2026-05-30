@@ -1266,6 +1266,34 @@
       #profile .profile-title { font-size: 19px; }
     }
 
+    /* ---- SNAP TOAST (fly economy events) ---- */
+    @keyframes snapLife {
+      0%   { opacity: 0; transform: translate(-50%, 12px); }
+      12%  { opacity: 1; transform: translate(-50%, 0); }
+      80%  { opacity: 1; transform: translate(-50%, 0); }
+      100% { opacity: 0; transform: translate(-50%, -8px); }
+    }
+    #snap-toast {
+      position: fixed;
+      bottom: 90px; left: 50%; transform: translate(-50%, 12px);
+      z-index: 13;
+      background: rgba(80, 30, 25, 0.92);
+      border: 1px solid rgba(255, 180, 130, 0.7);
+      border-radius: 10px;
+      padding: 8px 16px;
+      font: 600 13px/1 -apple-system, system-ui, sans-serif;
+      color: rgba(255, 230, 200, 0.98);
+      letter-spacing: 0.5px;
+      box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+      opacity: 0; pointer-events: none;
+    }
+    #snap-toast.show {
+      animation: snapLife 3.4s ease-out forwards;
+    }
+    @media (pointer: coarse), (max-width: 720px) {
+      #snap-toast { bottom: 200px; font-size: 12px; padding: 7px 12px; }
+    }
+
     /* ---- SAMPLE NET RESULT PANEL ---- */
     /* Auto-fade via CSS keyframes so the panel cannot get stuck "showing"
        even if the tab was backgrounded during the lifetime. */
@@ -2157,8 +2185,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=45"></script>
-  <script src="sprites.js?v=45"></script>
-  <script src="sketch.js?v=45"></script>
+  <script src="multiplayer.js?v=46"></script>
+  <script src="sprites.js?v=46"></script>
+  <script src="sketch.js?v=46"></script>
 </body>
 </html>
