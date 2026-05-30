@@ -6516,8 +6516,25 @@ function sampleWaterAtKayak() {
   playSound?.('splash', { volume: 0.35, rate: 1.2 });
 
   // Build the readout
+  // Map sample-net labels to portrait images where we have them. Falls back
+  // to plain text when there's no image (e.g. Redside shiners).
+  const BAIT_IMG = {
+    'Sculpin':           'images/sculpin.png',
+    'Smelt':             'images/smelt.png',
+    'Trout fry':         'images/trout-fry.png',
+    'Bluegill fry':      'images/bluegill-fry.png',
+    'Golden shiners':    'images/golden-shiner.png',
+    'Fathead minnows':   'images/fathead-minnow.png',
+    'Emerald shiners':   'images/emerald-shiner.png',
+    'Crayfish':          'images/crayfish.png',
+  };
+  const renderBait = (b) => {
+    const src = BAIT_IMG[b];
+    if (!src) return `<span class="sample-bug">${escapeHtmlGlobal(b)}</span>`;
+    return `<span class="sample-bug"><img class="sample-bait-img" src="${src}" alt="" loading="lazy">${escapeHtmlGlobal(b)}</span>`;
+  };
   const bugLine = bugs.map(b => `<span class="sample-bug">${escapeHtmlGlobal(b)}</span>`).join('');
-  const baitLine = baits.map(b => `<span class="sample-bug">${escapeHtmlGlobal(b)}</span>`).join('');
+  const baitLine = baits.map(renderBait).join('');
   const hatchLine = hatchInfo
     ? `<div class="sample-hatch">${currentHatch.emoji} ${escapeHtmlGlobal(hatchInfo.label)} ${hatchInfo.inside ? '· here' : '· nearby'}</div>`
     : '';
@@ -7118,6 +7135,54 @@ const FIELD_GUIDE_INSECTS = [
   },
 ];
 
+// Bait fish — the small forage fish that gamefish eat. What's here drives
+// which streamer pattern to throw and where to throw it. Surfaced in the
+// Sample Net readout as well.
+const FIELD_GUIDE_BAIT = [
+  {
+    id: 'goldenShiner', name: 'Golden Shiner', latin: 'Notemigonus crysoleucas',
+    img: 'images/golden-shiner.png', icon: '🐟', size: '75–250 mm', lakes: 'Bass Lake · weed beds',
+    fact: 'A deep-bodied, olive-and-gold minnow that schools through warm-water weed beds and lily-pad pockets. The largest North American shiner — big shiners are a staple meal for largemouth bass, pike, and chain pickerel. Olive-and-gold streamers (Clouser, Zonker) fished slowly along weed edges imitate a stunned or wounded shiner — the silhouette and a flash of belly are what triggers the eat.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'fatheadMinnow', name: 'Fathead Minnow', latin: 'Pimephales promelas',
+    img: 'images/fathead-minnow.png', icon: '🐟', size: '50–100 mm', lakes: 'Bass Lake · logs & snags',
+    fact: 'Stubby, blunt-nosed minnow built to survive almost any water — low oxygen, muddy bottoms, summer heat. Spawning males turn jet-black with a fleshy bump on the head ("fathead"). Hover in big loose schools near submerged logs, brush piles, and dock pilings. Black and olive baitfish patterns fished tight to wood structure are deadly on bass that are ambushing them from cover.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'emeraldShiner', name: 'Emerald Shiner', latin: 'Notropis atherinoides',
+    img: 'images/emerald-shiner.png', icon: '🐟', size: '60–110 mm', lakes: 'Bass Lake · open water',
+    fact: 'Slender, semi-translucent silver minnow with a faint emerald-green back stripe. Schools cruise open water in vast clouds, flickering as they turn in unison — a panic flash from a thousand fish at once is what attracts predators. White-and-pearl Clouser Minnows or small Zonkers ripped through the column imitate a fleeing emerald. Walleye, smallmouth, and largemouth all key on them.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'bluegillFry', name: 'Bluegill Fry', latin: 'Lepomis macrochirus (juvenile)',
+    img: 'images/bluegill-fry.png', icon: '🐟', size: '20–60 mm', lakes: 'Bass Lake · lily pads',
+    fact: 'Baby bluegill that hatch by the thousands in spring and hide under lily pads, dock pilings, and overhanging banks. Big bass and pike cruise the shoreline picking them off all summer. A small olive-and-yellow Wooly Bugger or a panfish-pattern streamer twitched along the pad edges imitates them — and often gets eaten by the very adult bluegill whose offspring it\'s pretending to be.',
+    flies: ['Wooly Bugger', 'Nymph'],
+  },
+  {
+    id: 'sculpin', name: 'Sculpin', latin: 'Family Cottidae',
+    img: 'images/sculpin.png', icon: '🐟', size: '50–150 mm', lakes: 'Alpine Lake · rocky bottoms',
+    fact: 'Big-headed, mottled-brown bottom hugger with oversized pectoral fins that act like wings to plant it against the rocks. Sculpin don\'t school — they ambush — and they almost never leave the bottom. A weighted Muddler or olive sculpin pattern crawled tight to the rocks imitates one perfectly. Browns and big rainbows in cold water inhale them. Dead-drift through pocket water or strip slowly across gravel.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'smelt', name: 'Smelt', latin: 'Family Osmeridae',
+    img: 'images/smelt.png', icon: '🐟', size: '100–200 mm', lakes: 'Alpine Lake · deep water',
+    fact: 'Slim, silver, slightly translucent forage fish of deep cold lakes — the primary food of lake trout and big landlocked salmon. Smelt school by the thousand and migrate up the water column to feed at dusk, which is also when trout feed hardest on them. Long white-and-blue streamers (Zonker, Deceiver) on a sink-tip line dragged through the column at last light is the classic presentation.',
+    flies: ['Wooly Bugger'],
+  },
+  {
+    id: 'troutFry', name: 'Trout Fry', latin: 'Oncorhynchus / Salvelinus (juvenile)',
+    img: 'images/trout-fry.png', icon: '🐟', size: '20–70 mm', lakes: 'Alpine Lake · weed edges',
+    fact: 'Last year\'s trout, now finger-length and trying not to become this year\'s meal. Hide in shallow weed cover near inlets where they were born. Adult trout — and especially big browns — are unapologetic cannibals; "matuka" and parr-marked streamers stripped along weed edges trigger savage strikes. Use a slightly faster retrieve than you would for a wounded baitfish; healthy fry dart.',
+    flies: ['Wooly Bugger'],
+  },
+];
+
 // Fishing knowledge — fundamentals every fly angler learns. Concept-level
 // entries (no portrait) covering reading water, gear, casting, fly choice,
 // playing fish, and catch-and-release ethics.
@@ -7183,6 +7248,7 @@ const FIELD_GUIDE_KNOWLEDGE = [
 // All categories — order here defines the tab order.
 const FIELD_GUIDE = {
   fish:      { label: 'Fish',         entries: FIELD_GUIDE_FISH },
+  bait:      { label: 'Bait Fish',    entries: FIELD_GUIDE_BAIT },
   insects:   { label: 'Insects',      entries: FIELD_GUIDE_INSECTS },
   birds:     { label: 'Birds',        entries: FIELD_GUIDE_BIRDS },
   plants:    { label: 'Plants',       entries: FIELD_GUIDE_PLANTS },

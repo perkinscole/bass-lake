@@ -1467,6 +1467,16 @@
       padding: 2px 7px;
       font-size: 11px;
       color: rgba(255, 230, 150, 0.92);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #sample-result .sample-bait-img {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
     }
     #sample-result .sample-rec {
       margin-top: 8px;
@@ -1499,8 +1509,17 @@
     #net-btn:hover { background: rgba(255, 220, 130, 0.18); }
     /* On mobile move it where the chat button isn't, and shift chat button right */
     @media (pointer: coarse), (max-width: 720px) {
-      #net-btn { bottom: 90px; left: 12px; width: 44px; height: 44px; font-size: 22px; }
-      /* if chat-btn is at left:100 on desktop, push it past the net button */
+      /* The joystick lives bottom-left and the cast button bottom-right, so
+         the entire bottom strip is touch-navigation territory. Park the
+         bucket up at the top-left next to the menu (☰) and mute (🔊)
+         buttons — clean space, no overlap. */
+      #net-btn {
+        top: 12px; left: 100px; bottom: auto;
+        width: 36px; height: 36px; font-size: 18px;
+      }
+      /* HUD text needs to drop further now that there's a row of three
+         top-left buttons (menu, mute, bucket) instead of two. */
+      #hud { top: 56px; }
       #chat-btn { /* mobile chat-btn is bottom-center; no change needed */ }
     }
 
@@ -2027,7 +2046,9 @@
       #hud-controls { display: none; }
       /* Mobile fly text duplicates the fly buttons; keep just the catch counter */
       #hud-fly { display: none; }
-      #hud { font-size: 11px; max-width: 50%; }
+      /* Push the HUD text below the menu (☰) and mute (🔊) buttons, which
+         sit at top:12 / left:12 + 56 on mobile (~36px tall). */
+      #hud { font-size: 11px; max-width: 50%; top: 56px; }
     }
     #touch-ui {
       position: fixed; inset: 0;
@@ -2278,8 +2299,8 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=53"></script>
-  <script src="sprites.js?v=53"></script>
-  <script src="sketch.js?v=53"></script>
+  <script src="multiplayer.js?v=56"></script>
+  <script src="sprites.js?v=56"></script>
+  <script src="sketch.js?v=56"></script>
 </body>
 </html>
