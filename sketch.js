@@ -400,7 +400,11 @@ let playerState = {
   level: 'bassLake',
   levelsUnlocked: { bassLake: true, alpineLake: false },
   unlocks: {
-    flies: { fly: true, nymph: false, woolyBugger: false },
+    // All three fly categories are usable from the start — the economy
+    // now gates which specific PATTERNS the player owns via flyStock, not
+    // the category itself. The unlock map is kept for backwards compat
+    // with old cloud profiles.
+    flies: { fly: true, nymph: true, woolyBugger: true },
     rod: 1,         // 1, 2, 3 — gates max cast range
     kayak: 1,       // 1, 2, 3 — gates paddle speed
     sonar: false,
@@ -419,29 +423,26 @@ const REWARDS = {
   crappie:    15,
   bass:       40,
 };
+// Gear-tier items. The old type-unlock items (Nymph fly, Wooly Bugger)
+// were retired when the fly economy started selling individual patterns.
 const SHOP_ITEMS = [
-  { id: 'nymph',       cost: 25,  label: 'Nymph fly',        desc: 'Catches crappie',
-    check: s => !s.unlocks.flies.nymph,
-    apply: s => { s.unlocks.flies.nymph = true; } },
-  { id: 'rod2',        cost: 60,  label: 'Mid-grade rod',    desc: 'Longer cast (350ft max)',
-    check: s => s.unlocks.rod < 2,
-    apply: s => { s.unlocks.rod = 2; } },
-  { id: 'kayak2',      cost: 80,  label: 'Faster kayak',     desc: '+30% paddle speed',
-    check: s => s.unlocks.kayak < 2,
-    apply: s => { s.unlocks.kayak = 2; } },
-  { id: 'woolyBugger', cost: 120, label: 'Wooly Bugger',     desc: 'Catches largemouth bass',
-    check: s => !s.unlocks.flies.woolyBugger,
-    apply: s => { s.unlocks.flies.woolyBugger = true; } },
-  { id: 'sonar',       cost: 200, label: 'Fish finder',      desc: 'Side-view sonar display',
-    check: s => !s.unlocks.sonar,
-    apply: s => { s.unlocks.sonar = true; } },
-  { id: 'rod3',        cost: 250, label: 'Pro rod',          desc: 'Maximum cast (480ft)',
-    check: s => s.unlocks.rod < 3,
-    apply: s => { s.unlocks.rod = 3; } },
-  { id: 'kayak3',      cost: 350, label: 'Sea kayak',        desc: '+60% paddle speed',
-    check: s => s.unlocks.kayak < 3,
-    apply: s => { s.unlocks.kayak = 3; } },
+  { id: 'rod2',   cost: 60,  label: 'Mid-grade rod', desc: 'Longer cast (350ft max)',
+    check: s => s.unlocks.rod < 2,   apply: s => { s.unlocks.rod = 2; } },
+  { id: 'kayak2', cost: 80,  label: 'Faster kayak',  desc: '+30% paddle speed',
+    check: s => s.unlocks.kayak < 2, apply: s => { s.unlocks.kayak = 2; } },
+  { id: 'sonar',  cost: 200, label: 'Fish finder',   desc: 'Side-view sonar display',
+    check: s => !s.unlocks.sonar,    apply: s => { s.unlocks.sonar = true; } },
+  { id: 'rod3',   cost: 250, label: 'Pro rod',       desc: 'Maximum cast (480ft)',
+    check: s => s.unlocks.rod < 3,   apply: s => { s.unlocks.rod = 3; } },
+  { id: 'kayak3', cost: 350, label: 'Sea kayak',     desc: '+60% paddle speed',
+    check: s => s.unlocks.kayak < 3, apply: s => { s.unlocks.kayak = 3; } },
 ];
+
+// Pack pricing for flies — discounts widen with quantity.
+function flyPackCost(pricePerFly, qty) {
+  const factor = qty >= 10 ? 0.8 : qty >= 5 ? 0.9 : 1.0;
+  return Math.max(1, Math.round(pricePerFly * qty * factor));
+}
 
 function refreshUnlocks() {
   MAX_CAST_RANGE = ROD_RANGES[playerState.unlocks.rod] || 220;
@@ -1396,24 +1397,83 @@ function populateShop() {
   let moneyEl = document.getElementById('shop-money');
   if (moneyEl) moneyEl.textContent = `$${playerState.money}`;
   if (!list) return;
-  list.innerHTML = SHOP_ITEMS.map(item => {
-    let owned = !item.check(playerState);
-    let canAfford = playerState.money >= item.cost;
-    let btnDisabled = owned || !canAfford;
-    let btnLabel = owned ? 'Owned' : 'Buy';
+
+  const CAT_LABELS = { fly: 'Dry Flies', nymph: 'Nymphs', woolyBugger: 'Streamers' };
+  const PACKS = [1, 5, 10];
+
+  // Build the Flies section: every non-default pattern as a card with
+  // current stock + three buy-quantity buttons.
+  let fliesHtml = '';
+  for (const cat of ['fly', 'nymph', 'woolyBugger']) {
+    fliesHtml += `<div class="shop-subhead">${CAT_LABELS[cat]}</div>`;
+    fliesHtml += '<div class="shop-fly-grid">';
+    for (const p of FLY_PATTERNS[cat]) {
+      if (p.isDefault) continue;     // Adams is free + infinite; no shop entry
+      const stock = getFlyStock(p.id);
+      const img = flyIcons[p.id] ? `<img src="${flyIcons[p.id]}" alt="">` : '';
+      const buys = PACKS.map(q => {
+        const cost = flyPackCost(p.price, q);
+        const aff  = playerState.money >= cost;
+        return `<button class="shop-buy" data-pat="${p.id}" data-qty="${q}" data-cost="${cost}" ${aff ? '' : 'disabled'}>×${q}<span>$${cost}</span></button>`;
+      }).join('');
+      fliesHtml += `<div class="shop-fly">
+        <div class="shop-fly-img">${img}</div>
+        <div class="shop-fly-info">
+          <div class="shop-fly-name">${escapeHtmlGlobal(p.label)}</div>
+          <div class="shop-fly-desc">${escapeHtmlGlobal(p.desc || '')}</div>
+          <div class="shop-fly-stock">In box: <b>×${stock}</b></div>
+        </div>
+        <div class="shop-fly-buys">${buys}</div>
+      </div>`;
+    }
+    fliesHtml += '</div>';
+  }
+
+  // Gear section: rod / kayak / sonar tiers — owned items grey out.
+  const gearHtml = SHOP_ITEMS.map(item => {
+    const owned = !item.check(playerState);
+    const canAfford = playerState.money >= item.cost;
+    const dis = owned || !canAfford;
     return `<div class="shop-item${owned ? ' owned' : ''}">
       <div class="info">
         <div class="name">${item.label}</div>
         <div class="desc">${item.desc}</div>
       </div>
       <div class="price">$${item.cost}</div>
-      <button data-id="${item.id}" ${btnDisabled ? 'disabled' : ''}>${btnLabel}</button>
+      <button data-id="${item.id}" ${dis ? 'disabled' : ''}>${owned ? 'Owned' : 'Buy'}</button>
     </div>`;
   }).join('');
-  // Re-bind buy buttons
+
+  list.innerHTML = `
+    <div class="shop-section">
+      <div class="shop-section-title">🪶 Flies</div>
+      ${fliesHtml}
+    </div>
+    <div class="shop-section">
+      <div class="shop-section-title">⚙️ Gear</div>
+      ${gearHtml}
+    </div>
+  `;
+
+  // Fly-buy buttons
+  list.querySelectorAll('.shop-buy').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.pat;
+      const qty = parseInt(btn.dataset.qty, 10) || 1;
+      const cost = parseInt(btn.dataset.cost, 10) || 0;
+      if (playerState.money < cost) return;
+      playerState.money -= cost;
+      addFlyStock(id, qty);
+      playSound('buy');
+      saveProgress();
+      populateShop();
+    });
+  });
+
+  // Gear buttons — same behavior as before
   list.querySelectorAll('button[data-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      let item = SHOP_ITEMS.find(i => i.id === btn.dataset.id);
+      const item = SHOP_ITEMS.find(i => i.id === btn.dataset.id);
       if (!item || !item.check(playerState) || playerState.money < item.cost) return;
       playerState.money -= item.cost;
       item.apply(playerState);
@@ -2399,7 +2459,7 @@ function toggleMenu() {
 }
 
 function trySelectFly(name) {
-  if (!playerState.unlocks.flies[name]) return;
+  if (!FLY_PATTERNS[name]) return;
   // Fly economy: if the active pattern in this category has 0 stock,
   // shift selection to the first pattern that DOES have stock. If none,
   // bounce back to Adams (the default).
