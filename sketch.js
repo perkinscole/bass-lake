@@ -125,23 +125,23 @@ const FLY_PATTERNS = {
     // only. Buy fancier dry flies to catch the other sunfish + trout.
     { id: 'adams',          label: 'Adams',           img: 'images/adams-dry-fly.png', hatches: ['mayfly'],          desc: 'Classic mayfly dun',          price: 0, isDefault: true,
       customCatches: ['bluegill', 'pumpkinseed'] },
-    { id: 'elkHairCaddis',  label: 'Elk Hair Caddis', img: null,                        hatches: ['caddis'],          desc: 'Skitters like a caddis',      price: 3 },
-    { id: 'griffithsGnat',  label: "Griffith's Gnat", img: null,                        hatches: ['midge'],           desc: 'Tiny midge cluster',          price: 3 },
-    { id: 'parachuteAdams', label: 'Parachute Adams', img: null,                        hatches: ['mayfly'],          desc: 'Low-riding all-purpose dun',  price: 3 },
+    { id: 'elkHairCaddis',  label: 'Elk Hair Caddis', img: 'images/elk-hair-caddis.png', hatches: ['caddis'],          desc: 'Skitters like a caddis',      price: 3 },
+    { id: 'griffithsGnat',  label: "Griffith's Gnat", img: 'images/griffiths-gnat.png',  hatches: ['midge'],           desc: 'Tiny midge cluster',          price: 3 },
+    { id: 'parachuteAdams', label: 'Parachute Adams', img: 'images/parachute-adams.png', hatches: ['mayfly'],          desc: 'Low-riding all-purpose dun',  price: 3 },
   ],
   nymph: [
     { id: 'princeNymph',    label: 'Prince Nymph',    img: 'images/prince-nymph.png',  hatches: ['mayfly','stone'],  desc: 'Attractor with biot wings',   price: 4 },
-    { id: 'pheasantTail',   label: 'Pheasant Tail',   img: null,                        hatches: ['mayfly'],          desc: 'Universal mayfly nymph',      price: 4 },
-    { id: 'haresEar',       label: "Hare's Ear",      img: null,                        hatches: ['caddis','mayfly'], desc: 'Buggy and impressionistic',   price: 4 },
-    { id: 'zebraMidge',     label: 'Zebra Midge',     img: null,                        hatches: ['midge'],           desc: 'Tiny chironomid pupa',        price: 5 },
-    { id: 'damselNymph',    label: 'Damsel Nymph',    img: null,                        hatches: ['damsel'],          desc: 'Slender weed-bed prowler',    price: 5 },
-    { id: 'stoneflyNymph',  label: 'Stonefly Nymph',  img: null,                        hatches: ['stone'],           desc: 'Big rubber-leg pattern',      price: 5 },
+    { id: 'pheasantTail',   label: 'Pheasant Tail',   img: 'images/pheasant-tail.png',  hatches: ['mayfly'],          desc: 'Universal mayfly nymph',      price: 4 },
+    { id: 'haresEar',       label: "Hare's Ear",      img: 'images/hares-ear.png',      hatches: ['caddis','mayfly'], desc: 'Buggy and impressionistic',   price: 4 },
+    { id: 'zebraMidge',     label: 'Zebra Midge',     img: 'images/zebra-midge.png',    hatches: ['midge'],           desc: 'Tiny chironomid pupa',        price: 5 },
+    { id: 'damselNymph',    label: 'Damsel Nymph',    img: 'images/damsel-nymph.png',   hatches: ['damsel'],          desc: 'Slender weed-bed prowler',    price: 5 },
+    { id: 'stoneflyNymph',  label: 'Stonefly Nymph',  img: 'images/stonefly-nymph.png', hatches: ['stone'],           desc: 'Big rubber-leg pattern',      price: 5 },
   ],
   woolyBugger: [
     { id: 'woolyBugger',    label: 'Wooly Bugger',    img: 'images/woolly-bugger.png', hatches: ['baitball'],        desc: 'Imitates leeches + small fish', price: 7 },
-    { id: 'clouserMinnow',  label: 'Clouser Minnow',  img: null,                        hatches: ['baitball'],        desc: 'Dumbbell eyes ride point-up',   price: 9 },
-    { id: 'muddlerMinnow',  label: 'Muddler Minnow',  img: null,                        hatches: [],                  desc: 'Spun deer-hair sculpin head',   price: 9 },
-    { id: 'zonker',         label: 'Zonker',          img: null,                        hatches: ['baitball'],        desc: 'Rabbit-strip baitfish',         price: 9 },
+    { id: 'clouserMinnow',  label: 'Clouser Minnow',  img: 'images/clouser-minnow.png', hatches: ['baitball'],        desc: 'Dumbbell eyes ride point-up',   price: 9 },
+    { id: 'muddlerMinnow',  label: 'Muddler Minnow',  img: 'images/muddler-minnow.png', hatches: [],                  desc: 'Spun deer-hair sculpin head',   price: 9 },
+    { id: 'zonker',         label: 'Zonker',          img: 'images/zonker.png',         hatches: ['baitball'],        desc: 'Rabbit-strip baitfish',         price: 9 },
   ],
 };
 // All patterns in one flat array — handy for lookups by id without
@@ -6924,32 +6924,32 @@ const FIELD_GUIDE_FISH = [
 const FIELD_GUIDE_BIRDS = [
   {
     id: 'mallard', name: 'Mallard Duck', latin: 'Anas platyrhynchos',
-    icon: '🦆', size: '~22 inches', lakes: 'Bass Lake · Alpine Lake',
+    img: 'images/mallard.png', icon: '🦆', size: '~22 inches', lakes: 'Bass Lake · Alpine Lake',
     fact: 'The most widespread dabbling duck in the world. Drakes have an iridescent green head and yellow bill; hens are streaky brown for nest camouflage. Dabbles head-down in shallows for seeds, plants, and aquatic insects. Pairs in spring, broods follow the hen in single file.',
   },
   {
     id: 'baldEagle', name: 'Bald Eagle', latin: 'Haliaeetus leucocephalus',
-    icon: '🦅', size: '~32 inches · 7 ft wingspan', lakes: 'Bass Lake · Alpine Lake',
+    img: 'images/bald-eagle.png', icon: '🦅', size: '~32 inches · 7 ft wingspan', lakes: 'Bass Lake · Alpine Lake',
     fact: 'The continent\'s iconic raptor. Adults have a stark white head and tail; juveniles are mottled brown for the first 4-5 years. Soars on flat wings looking for fish near the surface — drops feet-first to snatch them. Pairs mate for life and reuse the same massive stick nest year after year.',
   },
   {
     id: 'osprey', name: 'Osprey', latin: 'Pandion haliaetus',
-    icon: '🪶', size: '~24 inches', lakes: 'Bass Lake · Alpine Lake',
+    img: 'images/osprey.png', icon: '🪶', size: '~24 inches', lakes: 'Bass Lake · Alpine Lake',
     fact: 'The "fish hawk" — almost entirely piscivorous. Hovers 30-100 ft above the water, then folds its wings and plunges feet-first. Reversible outer toes and spiny pads on the feet grip slippery fish. Often carries the fish head-first to reduce drag.',
   },
   {
     id: 'kingfisher', name: 'Belted Kingfisher', latin: 'Megaceryle alcyon',
-    icon: '🐦', size: '~13 inches', lakes: 'Bass Lake · Alpine Lake',
+    img: 'images/belted-kingfisher.png', icon: '🐦', size: '~13 inches', lakes: 'Bass Lake · Alpine Lake',
     fact: 'Stocky, big-headed bird with a shaggy crest and a loud rattling call when flushed. Perches on overhanging branches, then dives headfirst for small fish. Females have a rust-colored belt across the chest — one of the few North American birds where the female is more colorful than the male.',
   },
   {
     id: 'greatBlueHeron', name: 'Great Blue Heron', latin: 'Ardea herodias',
-    icon: '🪿', size: '~46 inches · 6 ft wingspan', lakes: 'Bass Lake',
+    img: 'images/great-blue-heron.png', icon: '🪿', size: '~46 inches · 6 ft wingspan', lakes: 'Bass Lake',
     fact: 'The largest North American heron. Stands motionless in shallow water for minutes at a time, then spears fish or frogs with a lightning thrust of its dagger-like bill. Flies with a slow deliberate wingbeat and a folded "S" neck.',
   },
   {
     id: 'commonLoon', name: 'Common Loon', latin: 'Gavia immer',
-    icon: '🐦', size: '~30 inches', lakes: 'Alpine Lake',
+    img: 'images/common-loon.png', icon: '🐦', size: '~30 inches', lakes: 'Alpine Lake',
     fact: 'A signature voice of northern wilderness lakes — the eerie tremolo and yodel calls travel for miles. Loons are heavy-bodied with legs set far back on the body, perfect for underwater pursuit of fish. They can dive over 200 feet. Solid bones (uncommon in birds) give them dive ballast.',
   },
 ];
@@ -6958,37 +6958,37 @@ const FIELD_GUIDE_BIRDS = [
 const FIELD_GUIDE_PLANTS = [
   {
     id: 'waterLily', name: 'White Water Lily', latin: 'Nymphaea odorata',
-    icon: '🪷', size: 'Pad: 4–12 in across', lakes: 'Bass Lake',
+    img: 'images/water-lily.png', icon: '🪷', size: 'Pad: 4–12 in across', lakes: 'Bass Lake',
     fact: 'Floating pads anchored to the bottom by long flexible stalks. Pads create shaded cover that panfish (especially pumpkinseed and bluegill) hide under. White fragrant flowers open in the morning and close by mid-afternoon. Important nursery cover for small bass too.',
   },
   {
     id: 'cattail', name: 'Common Cattail', latin: 'Typha latifolia',
-    icon: '🌾', size: '4–8 feet tall', lakes: 'Bass Lake',
+    img: 'images/cattail.png', icon: '🌾', size: '4–8 feet tall', lakes: 'Bass Lake',
     fact: 'Tall reedy shoreline plant with the distinctive brown sausage-shaped flower spike. Forms dense stands at the water\'s edge that filter runoff, slow wave action, and shelter nesting birds. Roots, shoots, and pollen are all edible — sometimes called the "supermarket of the swamps."',
   },
   {
     id: 'pondweed', name: 'Pondweed', latin: 'Potamogeton spp.',
-    icon: '🌿', size: 'Mats: ankle-deep to 12+ ft', lakes: 'Bass Lake · Alpine Lake',
+    img: 'images/pondweed.png', icon: '🌿', size: 'Mats: ankle-deep to 12+ ft', lakes: 'Bass Lake · Alpine Lake',
     fact: 'Submerged aquatic plants that grow in mats just under the surface. Provide oxygen, hide larval and juvenile fish, and host the aquatic insects that feed everything else. Heavy mats can choke navigation and indicate over-rich (eutrophic) water.',
   },
   {
     id: 'milfoil', name: 'Eurasian Watermilfoil', latin: 'Myriophyllum spicatum',
-    icon: '⚠️', size: 'Up to 20 ft long', lakes: 'INVASIVE',
+    img: 'images/milfoil.png', icon: '⚠️', size: 'Up to 20 ft long', lakes: 'INVASIVE',
     fact: 'Invasive submerged plant introduced from Europe and Asia. Spreads from broken fragments — a single boat trailered with milfoil to a new lake can start an infestation. Forms dense mats that crowd out native plants and degrade fishing. Wash boats and waders between lakes.',
   },
   {
     id: 'whitePine', name: 'Eastern White Pine', latin: 'Pinus strobus',
-    icon: '🌲', size: '50–80 feet tall', lakes: 'Bass Lake',
+    img: 'images/white-pine.png', icon: '🌲', size: '50–80 feet tall', lakes: 'Bass Lake',
     fact: 'Soft long needles bundled in 5s — the only Eastern pine with this trait ("W-H-I-T-E" mnemonic). Towering tree of mature New England forests. Branches that hang out over water create classic largemouth bass cover from fallen tops and shaded edges.',
   },
   {
     id: 'engelmannSpruce', name: 'Engelmann Spruce', latin: 'Picea engelmannii',
-    icon: '🌲', size: '70–115 feet tall', lakes: 'Alpine Lake',
+    img: 'images/spruce.png', icon: '🌲', size: '70–115 feet tall', lakes: 'Alpine Lake',
     fact: 'Dominant high-elevation conifer of the Rocky Mountains. Short stiff square needles all the way around the twig. Tolerates short cool summers and bitter winters; common at treeline. Wood is the favored material for spruce-top guitars and violins.',
   },
   {
     id: 'redMaple', name: 'Red Maple', latin: 'Acer rubrum',
-    icon: '🍁', size: '40–60 feet tall', lakes: 'Bass Lake',
+    img: 'images/maple.png', icon: '🍁', size: '40–60 feet tall', lakes: 'Bass Lake',
     fact: 'One of the most abundant deciduous trees in eastern North America. Bright red flowers in early spring, red samaras in summer, and the show-stopping crimson fall color the species is named for. Frequently overhangs warmwater lakes and ponds.',
   },
 ];
@@ -6998,42 +6998,42 @@ const FIELD_GUIDE_PLANTS = [
 const FIELD_GUIDE_SCIENCE = [
   {
     id: 'thermocline', name: 'Thermocline', latin: 'Lake stratification',
-    icon: '🌡️', size: 'Typically 10–30 ft deep', lakes: 'Both lakes (summer)',
+    img: 'images/thermocline.jpg', icon: '🌡️', size: 'Typically 10–30 ft deep', lakes: 'Both lakes (summer)',
     fact: 'The narrow depth zone in summer where water temperature drops sharply over just a few feet. Above it (the epilimnion) is warm and oxygen-rich; below it (the hypolimnion) is cold, dark, and oxygen-poor. Many fish stage right at the thermocline because food and oxygen are both available there.',
   },
   {
     id: 'turnover', name: 'Lake Turnover', latin: 'Spring and fall mixing',
-    icon: '🔄', size: 'Whole-water-column event', lakes: 'Both lakes',
+    img: 'images/turnover.jpg', icon: '🔄', size: 'Whole-water-column event', lakes: 'Both lakes',
     fact: 'Twice a year, when surface water reaches ~39°F (water\'s densest temp), the entire lake mixes top to bottom. This re-oxygenates the deep water and stirs up nutrients from the bottom. Fall turnover often coincides with a few days of poor fishing as the water "rolls."',
   },
   {
     id: 'eutrophication', name: 'Eutrophication', latin: 'Nutrient loading',
-    icon: '🌊', size: 'Lake-wide gradual change', lakes: 'Especially Bass Lake',
+    img: 'images/eutrophication.jpg', icon: '🌊', size: 'Lake-wide gradual change', lakes: 'Especially Bass Lake',
     fact: 'A lake\'s slow march from clear and oligotrophic (low nutrient) to murky and eutrophic (high nutrient). Lawn fertilizer, septic leakage, and shoreline development accelerate the process by decades. Symptoms: algal blooms, weed choking, fish kills, lost cold-water species.',
   },
   {
     id: 'dissolvedOxygen', name: 'Dissolved Oxygen', latin: 'mg/L (ppm)',
-    icon: '💧', size: 'Trout: ≥5 ppm · Bass: ≥3 ppm', lakes: 'Both lakes',
+    img: 'images/dissolved-oxygen.jpg', icon: '💧', size: 'Trout: ≥5 ppm · Bass: ≥3 ppm', lakes: 'Both lakes',
     fact: 'The oxygen molecules dissolved in water. Cold water holds more O₂ than warm water — that\'s why trout thrive in alpine lakes and die in warm ones. Plants make O₂ by day and consume it by night. Late summer "fish kills" usually happen at dawn after a warm cloudy week.',
   },
   {
     id: 'invasive', name: 'Invasive Species', latin: 'Aquatic invaders',
-    icon: '⚠️', size: 'Microscopic to several feet', lakes: 'Both lakes',
+    img: 'images/invasive.webp', icon: '⚠️', size: 'Microscopic to several feet', lakes: 'Both lakes',
     fact: 'Non-native species that out-compete the native community. Common offenders: zebra mussels, Eurasian milfoil, rusty crayfish, snakehead, Asian carp. Always clean, drain, and dry your boat and waders between waters — a single fragment or hitchhiking larva can ruin a lake for decades.',
   },
   {
     id: 'watershed', name: 'Watershed', latin: 'Drainage basin',
-    icon: '🗺️', size: 'Square miles to thousands', lakes: 'Both lakes',
+    img: 'images/watershed.jpg', icon: '🗺️', size: 'Square miles to thousands', lakes: 'Both lakes',
     fact: 'The total land area that drains into a lake. Everything that happens on the watershed — a logging cut, a road salt spread, a farm spill — eventually reaches the lake. Healthy watersheds with intact forests and wetlands act as giant filters that protect water quality.',
   },
   {
     id: 'pH', name: 'pH & Alkalinity', latin: 'Acidity buffering',
-    icon: '🧪', size: 'Good water: pH 6.5–8.5', lakes: 'Both lakes',
+    img: 'images/ph.jpg', icon: '🧪', size: 'Good water: pH 6.5–8.5', lakes: 'Both lakes',
     fact: 'pH is the acidity of the water; alkalinity is its ability to resist pH change. Alpine lakes sitting on granite have low alkalinity and are vulnerable to acid rain. Limestone basins (bass-lake country) buffer themselves naturally and rarely swing.',
   },
   {
     id: 'riparian', name: 'Riparian Buffer', latin: 'Shoreline zone',
-    icon: '🌿', size: '25–100 ft wide ideally', lakes: 'Both lakes',
+    img: 'images/riparian-buffer.jpg', icon: '🌿', size: '25–100 ft wide ideally', lakes: 'Both lakes',
     fact: 'The strip of native vegetation along the shore. It filters runoff, holds the bank against erosion, shades the water, drops insect food into the lake, and provides nesting cover. Lakefront owners who mow to the water\'s edge degrade fisheries faster than almost anything else.',
   },
   {
@@ -7050,31 +7050,31 @@ const FIELD_GUIDE_SCIENCE = [
 const FIELD_GUIDE_INSECTS = [
   {
     id: 'mayfly', name: 'Mayfly', latin: 'Order Ephemeroptera',
-    icon: '🪶', size: '3–15 mm body', lakes: 'Both lakes · stream inlets',
+    img: 'images/mayfly.png', icon: '🪶', size: '3–15 mm body', lakes: 'Both lakes · stream inlets',
     fact: 'The signature aquatic insect of fly fishing. Adults hold upright sail-like wings and trail two or three filament tails; many species live less than 24 hours as adults (hence "ephemeral"). Trout key on whichever life stage is most available — nymphs along the bottom, emergers in the surface film, duns drifting on top after hatching, and spinners after they mate and die. The Adams dry fly is the classic generic dun imitation.',
     flies: ['Dry Fly', 'Nymph'],
   },
   {
     id: 'caddisfly', name: 'Caddisfly', latin: 'Order Trichoptera',
-    icon: '🦋', size: '6–25 mm body', lakes: 'Both lakes · cold streams',
+    img: 'images/caddisfly.png', icon: '🦋', size: '6–25 mm body', lakes: 'Both lakes · cold streams',
     fact: 'Mothy-looking adults that hold their wings flat over the back like a tent. Larvae build protective cases of pebbles, sand, sticks, or leaves cemented together with silk — flip over a streambed rock and you\'ll find them clinging by the dozen. Pupae rise to the surface in evasive fluttering runs that trigger aggressive strikes. The Elk Hair Caddis is the iconic dry-fly imitation.',
     flies: ['Dry Fly', 'Nymph'],
   },
   {
     id: 'stonefly', name: 'Stonefly', latin: 'Order Plecoptera',
-    icon: '🪲', size: '10–50 mm body', lakes: 'Cold rocky rivers',
+    img: 'images/stonefly.png', icon: '🪲', size: '10–50 mm body', lakes: 'Cold rocky rivers',
     fact: 'Big, flat-bodied insects that NEED cold, well-oxygenated water — finding them means the stream is healthy. Nymphs live on the streambed for one to three years, then crawl ONTO rocks (not up through the surface) to molt into adults. Western salmonflies and golden stones are enormous trout food. Pat\'s Rubber Legs is the go-to nymph imitation.',
     flies: ['Nymph'],
   },
   {
     id: 'midge', name: 'Midge', latin: 'Family Chironomidae',
-    icon: '🦟', size: '1–10 mm body', lakes: 'Both lakes · year-round',
+    img: 'images/midge.png', icon: '🦟', size: '1–10 mm body', lakes: 'Both lakes · year-round',
     fact: 'Tiny non-biting mosquito relatives. Often the only food available in winter and very early spring. Larvae are red wormlike "bloodworms"; pupae rise toward the surface as a thread suspended just below the film, sometimes for hours. Tie them on tiny hooks — #18 to #24. Griffith\'s Gnat (dry) and Zebra Midge (nymph) are the standard patterns.',
     flies: ['Dry Fly', 'Nymph'],
   },
   {
     id: 'damselfly', name: 'Damselfly Nymph', latin: 'Suborder Zygoptera',
-    icon: '🪲', size: '15–40 mm long', lakes: 'Both lakes · weed edges',
+    img: 'images/damselfly-nymph.png', icon: '🪲', size: '15–40 mm long', lakes: 'Both lakes · weed edges',
     fact: 'Slim predatory aquatic nymph with three leaf-shaped gills trailing from the tail. Stalks weed beds hunting mosquito larvae and smaller invertebrates. When ready to emerge it migrates toward the shoreline and crawls up an emergent stem to molt — that migration triggers a feeding frenzy among bass, bluegill, and trout alike.',
     flies: ['Nymph'],
   },
@@ -7086,25 +7086,25 @@ const FIELD_GUIDE_INSECTS = [
   },
   {
     id: 'hellgrammite', name: 'Hellgrammite', latin: 'Family Corydalidae',
-    icon: '🐛', size: '25–75 mm long', lakes: 'Cold rocky rivers',
+    img: 'images/hellgrammite.png', icon: '🐛', size: '25–75 mm long', lakes: 'Cold rocky rivers',
     fact: 'Fearsome aquatic larva of the dobsonfly. Lives two or three years under rocks in fast, cold rivers eating other insects and small fish. Looks like a centipede crossed with a worm — and bites hard if handled carelessly. Smallmouth bass dinner-bell; black streamers fished slowly along the bottom imitate them.',
     flies: ['Wooly Bugger'],
   },
   {
     id: 'scud', name: 'Scud', latin: 'Order Amphipoda',
-    icon: '🦐', size: '5–25 mm long', lakes: 'Both lakes · tailwaters',
+    img: 'images/scud.png', icon: '🦐', size: '5–25 mm long', lakes: 'Both lakes · tailwaters',
     fact: 'Not technically an insect — a tiny pale-orange or olive freshwater crustacean — but fly anglers lump them in. Look like miniature shrimp scuttling through weed mats. In stillwater and tailwaters where mayfly hatches are sparse, trout cruise feed on scuds non-stop. Pink and UV Scud patterns drifted slowly through weeds are deadly.',
     flies: ['Nymph'],
   },
   {
     id: 'terrestrial', name: 'Terrestrials', latin: 'Land insects',
-    icon: '🦗', size: '6–80 mm body', lakes: 'Summer · all waters',
+    img: 'images/ant.png', icon: '🦗', size: '6–80 mm body', lakes: 'Summer · all waters',
     fact: 'Grasshoppers, ants, beetles, crickets, and cicadas that fall in from overhanging grass or trees. Especially important in late summer when aquatic hatches taper off. Fish them tight to the bank where wind and gravity deliver them. The hopper-dropper rig — a foam grasshopper on the surface with a nymph dangling 18-24″ below — is one of the most productive summer setups for trout AND bass.',
     flies: ['Dry Fly', 'Nymph'],
   },
   {
     id: 'crayfish', name: 'Crayfish', latin: 'Family Cambaridae',
-    icon: '🦞', size: '25–150 mm', lakes: 'Both lakes · rocky bottoms',
+    img: 'images/crayfish.png', icon: '🦞', size: '25–150 mm', lakes: 'Both lakes · rocky bottoms',
     fact: 'Lobster cousins that scuttle backwards along rocky bottoms in shallow water. Among the largest single food items in many warmwater lakes. Smallmouth bass adore them; pike and big brown trout eat them too. Olive and rust streamers fished slowly along the bottom — with the hook riding point-up to avoid snagging — imitate the natural retreat motion.',
     flies: ['Wooly Bugger'],
   },
@@ -7251,7 +7251,9 @@ function buildGuideThumbs() {
   if (!thumbs) return;
   const entries = FIELD_GUIDE[guideCategory].entries;
   thumbs.innerHTML = entries.map((entry, i) => {
-    const portrait = speciesPortraits[entry.id];
+    // Priority: entry.img (custom-supplied art) -> speciesPortraits (fish)
+    // -> emoji fallback.
+    const portrait = entry.img || speciesPortraits[entry.id];
     const inner = portrait
       ? `<img src="${escapeHtmlGlobal(portrait)}" alt="" />`
       : `<span class="thumb-emoji">${escapeHtmlGlobal(entry.icon || '·')}</span>`;
@@ -7276,8 +7278,9 @@ function renderGuide() {
     b.classList.toggle('active', b.dataset.cat === guideCategory);
   });
 
-  // Portrait: image if we have one, otherwise the entry's emoji icon
-  const portrait = speciesPortraits[e.id];
+  // Portrait: entry.img first (custom-supplied), then the fish
+  // speciesPortraits map, then fall back to the entry.icon emoji.
+  const portrait = e.img || speciesPortraits[e.id];
   const portraitWrap = document.querySelector('#guide .guide-portrait-wrap');
   const img = $('guide-portrait');
   if (portrait && img) {
