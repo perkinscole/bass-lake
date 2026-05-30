@@ -4825,12 +4825,18 @@ class FlyCast {
     const hatchBonus = inHatch ? currentHatch.bonusBiteRange * (patternMatch ? 2 : 1) : 0;
     let bestD = cfg.biteRange + hatchBonus;
     let best = null;
-    // What does THIS fly type catch in the current level? Build a quick lookup.
-    let levelCatches = lvl().catches[this.flyType] || [];
+    // What does THIS fly catch? Pattern-specific customCatches (e.g.,
+    // Adams is restricted to bluegill + pumpkinseed only) override the
+    // level-wide list for this fly type. Other patterns inherit the
+    // broader level table.
+    const lvlCatches = lvl().catches[this.flyType] || [];
+    const baseCatches = (castPattern && castPattern.customCatches) || lvlCatches;
     let canCatch = Object.create(null);
-    for (let sp of levelCatches) canCatch[sp] = true;
-    // When the fly is in the hatch zone, additional species key on it.
-    if (inHatch) {
+    for (let sp of baseCatches) canCatch[sp] = true;
+    // When the fly is in the hatch zone, additional species key on it —
+    // but only if the pattern isn't artificially restricted (Adams stays
+    // a bluegill/pumpkinseed-only fly even in a hatch).
+    if (inHatch && !(castPattern && castPattern.customCatches)) {
       for (let sp of currentHatch.bonusSpecies) canCatch[sp] = true;
     }
     let spookedNow = (f) => f.spookedUntil && frameCount < f.spookedUntil;
