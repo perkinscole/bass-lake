@@ -916,6 +916,7 @@
     }
     #shop.hidden { display: none; }
     #shop .shop-card {
+      position: relative;
       background: linear-gradient(135deg, rgba(22, 38, 32, 0.98), rgba(12, 24, 20, 0.98));
       border: 2px solid rgba(255, 220, 130, 0.5);
       border-radius: 12px;
@@ -995,6 +996,57 @@
       font: 700 12px 'SF Mono', Menlo, monospace;
       color: rgba(190, 230, 130, 0.98);
     }
+    /* Purchase feedback — green pulse on the card the player just bought
+       from, brief glow on the money counter, and a slide-in toast inside
+       the shop card. */
+    #shop .shop-fly.bought-flash,
+    #shop .shop-item.bought-flash {
+      animation: shopBuyPulse 700ms ease-out;
+    }
+    @keyframes shopBuyPulse {
+      0%   { background: rgba(0, 0, 0, 0.28);        box-shadow: 0 0 0 rgba(190, 230, 130, 0); }
+      18%  { background: rgba(190, 230, 130, 0.32);  box-shadow: 0 0 0 4px rgba(190, 230, 130, 0.35); }
+      100% { background: rgba(0, 0, 0, 0.28);        box-shadow: 0 0 0 rgba(190, 230, 130, 0); }
+    }
+    #shop .shop-money.money-flash {
+      animation: shopMoneyFlash 600ms ease-out;
+    }
+    @keyframes shopMoneyFlash {
+      0%   { color: rgba(190, 230, 130, 0.95); transform: scale(1); }
+      30%  { color: rgba(255, 140, 110, 1);    transform: scale(1.12); }
+      100% { color: rgba(190, 230, 130, 0.95); transform: scale(1); }
+    }
+    #shop-toast {
+      position: absolute;
+      top: 56px; left: 50%; transform: translate(-50%, -12px);
+      background: rgba(20, 35, 30, 0.94);
+      border: 1px solid rgba(190, 230, 130, 0.55);
+      border-radius: 999px;
+      padding: 8px 16px;
+      color: rgba(220, 240, 200, 0.98);
+      font: 600 13px/1 -apple-system, system-ui, sans-serif;
+      letter-spacing: 0.3px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      opacity: 0;
+      z-index: 5;
+      white-space: nowrap;
+    }
+    #shop-toast.show {
+      animation: shopToastLife 1600ms ease-out forwards;
+    }
+    #shop-toast .check {
+      color: rgba(190, 230, 130, 1);
+      margin-right: 6px;
+      font-weight: 700;
+    }
+    @keyframes shopToastLife {
+      0%   { opacity: 0; transform: translate(-50%, -16px); }
+      15%  { opacity: 1; transform: translate(-50%, 0); }
+      75%  { opacity: 1; transform: translate(-50%, 0); }
+      100% { opacity: 0; transform: translate(-50%, -8px); }
+    }
+
     #shop .shop-fly-buys { display: flex; gap: 4px; }
     #shop .shop-buy {
       background: rgba(255, 220, 130, 0.85);
@@ -2379,9 +2431,9 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=59"></script>
-  <script src="sprites.js?v=59"></script>
-  <script src="sketch.js?v=59"></script>
+  <script src="multiplayer.js?v=60"></script>
+  <script src="sprites.js?v=60"></script>
+  <script src="sketch.js?v=60"></script>
   <script>
     // Studio splash — click or tap to skip; otherwise auto-dismisses via
     // the CSS animation after ~2.6s. Remove from DOM after fade so it

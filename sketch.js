@@ -1470,11 +1470,18 @@ function populateShop() {
       const qty = parseInt(btn.dataset.qty, 10) || 1;
       const cost = parseInt(btn.dataset.cost, 10) || 0;
       if (playerState.money < cost) return;
+      const pat = findPattern(id);
       playerState.money -= cost;
       addFlyStock(id, qty);
       playSound('buy');
       saveProgress();
       populateShop();
+      // Visible feedback: toast at the top of the shop card + green pulse
+      // on the corresponding fly row + money counter flash.
+      const label = pat ? pat.label : 'Fly';
+      showShopToast(`+${qty} ${label} — added to Fly Box`);
+      flashShopCard(`.shop-fly [data-pat="${id}"]`);
+      flashShopMoney();
     });
   });
 
@@ -1490,8 +1497,52 @@ function populateShop() {
       populateMenuFlyGrid();
       populateShop();
       playSound('buy');
+      showShopToast(`✓ ${item.label} purchased`);
+      flashShopCard(`.shop-item [data-id="${item.id}"]`);
+      flashShopMoney();
     });
   });
+}
+
+// ----------------------------------------------------------------------------
+// Shop purchase feedback — invoked from the buy handlers in populateShop().
+// We re-render the shop list on every buy (so stock counts update), which
+// nukes any animation mid-flight. So we run these AFTER populateShop() and
+// scope our selectors to the freshly-rendered DOM.
+// ----------------------------------------------------------------------------
+function showShopToast(msg) {
+  const card = document.querySelector('#shop .shop-card');
+  if (!card) return;
+  let toast = document.getElementById('shop-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'shop-toast';
+    card.appendChild(toast);
+  }
+  toast.innerHTML = `<span class="check">✓</span>${escapeHtmlGlobal(msg)}`;
+  // Restart the CSS animation by removing + force-reflow + re-adding.
+  toast.classList.remove('show');
+  void toast.offsetWidth;
+  toast.classList.add('show');
+}
+function flashShopCard(buttonSelector) {
+  // The buy button was inside a .shop-fly or .shop-item row — find that
+  // ancestor on the FRESH DOM (populateShop just re-rendered).
+  const btn = document.querySelector(`#shop ${buttonSelector}`);
+  const row = btn?.closest('.shop-fly, .shop-item');
+  if (!row) return;
+  row.classList.remove('bought-flash');
+  void row.offsetWidth;
+  row.classList.add('bought-flash');
+  setTimeout(() => row.classList.remove('bought-flash'), 750);
+}
+function flashShopMoney() {
+  const m = document.getElementById('shop-money');
+  if (!m) return;
+  m.classList.remove('money-flash');
+  void m.offsetWidth;
+  m.classList.add('money-flash');
+  setTimeout(() => m.classList.remove('money-flash'), 650);
 }
 
 function buildFlyIcons() {
