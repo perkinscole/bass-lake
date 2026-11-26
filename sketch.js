@@ -274,6 +274,8 @@ const LEVELS = {
       caustic:   [140, 195, 175],   // soft caustic glints
       bubble:    [220, 240, 255],   // air bubbles
       ripple:    [220, 240, 255],   // expanding rings
+      foam:      [236, 246, 238],   // shoreline foam + water lapping at rocks
+      flyLine:   [236, 228, 150],   // pale yellow fly line — shows on dark water
       fishVisDepth:     0.18,       // panfish visibility cutoff (z)
       predatorVisDepth: 0.22,       // bass-class visibility cutoff
       forest:    [80, 95, 45],     // warm yellow-green meadow
@@ -350,6 +352,9 @@ const LEVELS = {
       caustic:   [200, 230, 255],     // bright cyan caustic glints
       bubble:    [40, 70, 100],       // dark blue rings — visible on light water
       ripple:    [30, 60, 90],
+      foam:      [255, 255, 255],
+      flyLine:   [244, 122, 44],      // hot orange — shows on pale blue water
+      sparkle:   [255, 255, 255],
       fishVisDepth:     0.32,         // see fish deeper through clear water
       predatorVisDepth: 0.42,
       forest:    [232, 236, 242],     // bright snow with bluish cast
@@ -810,7 +815,7 @@ function buildWorld(seed) {
     logs.push({
       x: p.x, y: p.y,
       len: random(80, 160),
-      thick: random(10, 18),
+      thick: random(6, 11),
       a: angle,
     });
   }
@@ -912,6 +917,9 @@ function buildWorld(seed) {
     }
   }
 
+  // Derive each prop's look (sprite, canopy size, pad type) from where the
+  // simulation put it, then paint the static world.
+  Art.prepareWorld();
   buildStaticImage();
 
   // Re-randomize the cosmetic RNG. World layout is now locked in; from here
@@ -1919,198 +1927,10 @@ function buildSpeciesPortraits() {
 }
 
 function buildStaticImage() {
-  // Bake everything that doesn't change to a single image. Memory: 2800x2800 *
-  // 4 bytes ≈ 31MB at pixelDensity 1.
-  let sw = Math.floor(WORLD_W * STATIC_SCALE);
-  let sh = Math.floor(WORLD_H * STATIC_SCALE);
-  let g = createGraphics(sw, sh);
-  g.pixelDensity(1);
-  g.scale(STATIC_SCALE);
-  g.noStroke();
-
-  // forest floor — palette-driven so snowy alpine vs warm bass lake
-  // actually look different.
-  const pal = lvl().palette;
-  g.background(pal.forest[0], pal.forest[1], pal.forest[2]);
-
-  // Terrain blobs — large soft color patches that break up the flat
-  // forest base into a varied landscape (rock / snow / meadow / earth).
-  for (let b of terrainBlobs) {
-    g.push();
-    g.translate(b.x, b.y);
-    g.rotate(b.rot);
-    g.fill(b.c[0], b.c[1], b.c[2], b.a);
-    g.ellipse(0, 0, b.r * 2, b.r * 2 * b.ar);
-    g.pop();
-  }
-
-  // Topographic contour features (alpine high country). Each feature is
-  // a nested set of irregular rings with elevation-based shading:
-  //   outer = green meadow → mid = brown rock → inner = snow/white.
-  // A thin contour line is drawn over every other ring like a topo map.
-  for (let f of topoFeatures) {
-    drawTopoFeature(g, f);
-  }
-
-  // Dirt + sand specks finally on top so the texture survives the
-  // overlay layers.
-  for (let s of lake.dirtSpecks) {
-    g.fill(s.c[0], s.c[1], s.c[2], 180);
-    g.ellipse(s.x, s.y, s.r);
-  }
-  for (let s of lake.sandSpecks) {
-    g.fill(pal.sand[0], pal.sand[1], pal.sand[2], 140);
-    g.ellipse(s.x, s.y, s.r);
-  }
-
-  // trees: trunks then canopies. Pines get a spiky, conical top-down look.
-  for (let t of trees) {
-    g.fill(40, 30, 22, 220);
-    g.ellipse(t.x, t.y, t.r * 0.35, t.r * 0.35);
-  }
-  for (let t of trees) {
-    g.fill(0, 0, 0, 60);
-    g.ellipse(t.x + 6, t.y + 8, t.r * 1.6, t.r * 1.4);
-    if (t.pine) {
-      // base dark-green disk, then a starburst of triangle "branches"
-      // radiating outward to suggest pine needles seen from directly above.
-      let baseR = t.r * 1.0;
-      g.fill(t.hue - 6, t.val - 12, t.tone - 6);
-      g.ellipse(t.x, t.y, baseR * 1.2, baseR * 1.2);
-      g.fill(t.hue, t.val, t.tone);
-      let prongs = 8;
-      g.beginShape();
-      for (let i = 0; i < prongs * 2; i++) {
-        let a = (i / (prongs * 2)) * TWO_PI + t.x * 0.005;
-        let rr = (i % 2 === 0) ? baseR * 1.05 : baseR * 0.62;
-        g.vertex(t.x + Math.cos(a) * rr, t.y + Math.sin(a) * rr);
-      }
-      g.endShape(g.CLOSE);
-      // sunlit tip near the apex of the conical tree
-      g.fill(t.hue + 22, t.val + 30, t.tone + 12, 240);
-      g.ellipse(t.x - t.r * 0.05, t.y - t.r * 0.08, t.r * 0.32, t.r * 0.32);
-      // dark central shadow at the very top (suggesting the tip of the cone)
-      g.fill(t.hue - 18, t.val - 25, t.tone - 12, 180);
-      g.ellipse(t.x, t.y, t.r * 0.18, t.r * 0.18);
-    } else {
-      g.fill(t.hue - 10, t.val - 10, t.tone - 10);
-      g.ellipse(t.x, t.y, t.r * 1.7, t.r * 1.5);
-      for (let i = 0; i < 5; i++) {
-        let a = (i / 5) * TWO_PI + t.x * 0.01;
-        let dx = Math.cos(a) * t.r * 0.45;
-        let dy = Math.sin(a) * t.r * 0.4;
-        g.fill(t.hue, t.val, t.tone, 220);
-        g.ellipse(t.x + dx, t.y + dy, t.r * 0.85, t.r * 0.75);
-      }
-      g.fill(t.hue + 15, t.val + 25, t.tone + 5, 200);
-      g.ellipse(t.x - t.r * 0.2, t.y - t.r * 0.25, t.r * 0.6, t.r * 0.5);
-    }
-  }
-
-  // lake water polygon — base color from level palette
-  let waterPal = lvl().palette.waterBase;
-  g.fill(waterPal[0], waterPal[1], waterPal[2]);
-  g.beginShape();
-  for (let p of lake.points) g.vertex(p.x, p.y);
-  g.endShape(g.CLOSE);
-
-  // surface patches — clipped to lake polygon, with bake-time blur for blending
-  g.drawingContext.save();
-  g.drawingContext.beginPath();
-  g.drawingContext.moveTo(lake.points[0].x, lake.points[0].y);
-  for (let i = 1; i < lake.points.length; i++) {
-    g.drawingContext.lineTo(lake.points[i].x, lake.points[i].y);
-  }
-  g.drawingContext.closePath();
-  g.drawingContext.clip();
-  g.drawingContext.filter = 'blur(18px)';
-  for (let p of lake.surfacePatches) {
-    g.fill(p.c[0], p.c[1], p.c[2], p.a);
-    g.ellipse(p.x, p.y, p.r, p.r * p.aspect);
-  }
-  g.drawingContext.filter = 'none';
-  // tree shadows over water (still inside lake clip)
-  for (let t of trees) {
-    let inAmt = lake.insideAmount(t.x, t.y);
-    if (inAmt > -150 && inAmt < 80) {
-      let inward = lake.inwardNormal(t.x, t.y);
-      let cx = t.x + inward.x * (t.r * 0.6);
-      let cy = t.y + inward.y * (t.r * 0.6);
-      g.fill(0, 10, 5, 70 * t.shade * 4);
-      g.ellipse(cx, cy, t.r * 1.8, t.r * 1.4);
-      g.fill(0, 10, 5, 30 * t.shade * 4);
-      g.ellipse(cx, cy, t.r * 2.6, t.r * 2.0);
-    }
-  }
-  g.drawingContext.restore();
-
-  // shoreline edge
-  let shorePal = lvl().palette.shoreline;
-  g.stroke(shorePal[0], shorePal[1], shorePal[2], 220);
-  g.strokeWeight(4);
-  g.noFill();
-  g.beginShape();
-  for (let p of lake.points) g.vertex(p.x, p.y);
-  g.endShape(g.CLOSE);
-  g.noStroke();
-
-  // rocks
-  for (let r of rocks) {
-    g.fill(0, 0, 0, 70);
-    g.ellipse(r.x + 1, r.y + 2, r.r * 2.1, r.r * 1.4);
-    g.fill(r.shade, r.shade, r.shade);
-    g.ellipse(r.x, r.y, r.r * 2, r.r * 1.4);
-    g.fill(r.shade + 30, r.shade + 30, r.shade + 30, 200);
-    g.ellipse(r.x - r.r * 0.2, r.y - r.r * 0.25, r.r * 0.7, r.r * 0.4);
-  }
-
-  // logs — replicate drawLog using the offscreen graphics
-  for (let l of logs) {
-    g.push();
-    g.translate(l.x, l.y);
-    g.rotate(l.a);
-    g.fill(0, 0, 0, 80);
-    g.ellipse(2, 4, l.len, l.thick * 1.3);
-    g.fill(75, 55, 35);
-    g.rect(-l.len / 2, -l.thick / 2, l.len, l.thick, l.thick * 0.4);
-    g.stroke(45, 30, 18, 200);
-    g.strokeWeight(1);
-    for (let i = -l.len / 2 + 6; i < l.len / 2 - 6; i += 8) {
-      g.line(i, -l.thick / 2 + 2, i, l.thick / 2 - 2);
-    }
-    g.noStroke();
-    g.fill(110, 80, 50);
-    g.ellipse(-l.len / 2 + 2, 0, l.thick * 0.9, l.thick);
-    g.ellipse(l.len / 2 - 2, 0, l.thick * 0.9, l.thick);
-    g.fill(70, 50, 30);
-    g.ellipse(-l.len / 2 + 2, 0, l.thick * 0.45, l.thick * 0.5);
-    g.ellipse(l.len / 2 - 2, 0, l.thick * 0.45, l.thick * 0.5);
-    g.pop();
-  }
-
-  // snags — sunken stumps with a stub above water
-  for (let s of snags) {
-    g.fill(28, 22, 18, 95);
-    g.ellipse(s.x, s.y, s.r * 2.6, s.r * 1.6);
-    g.fill(45, 35, 25, 120);
-    g.ellipse(s.x, s.y, s.r * 1.8, s.r * 1.1);
-    g.push();
-    g.translate(s.x, s.y - 1);
-    g.rotate(s.stubLean);
-    g.fill(220, 230, 235, 50);
-    g.ellipse(0, 0, s.r * 1.5, s.r * 0.7);
-    g.fill(60, 42, 28);
-    g.rect(-s.r * 0.32, -s.stubH, s.r * 0.64, s.stubH, 2);
-    g.fill(85, 58, 38);
-    g.rect(-s.r * 0.32, -s.stubH, s.r * 0.18, s.stubH, 2);
-    g.fill(140, 110, 75);
-    g.ellipse(0, -s.stubH, s.r * 0.62, s.r * 0.22);
-    g.fill(50, 35, 22);
-    g.ellipse(0, -s.stubH + 1, s.r * 0.45, s.r * 0.14);
-    g.pop();
-  }
-
-  staticImg = g;
+  // Everything that never changes — ground, beach, water depth, shadows —
+  // is painted once into an offscreen canvas (see Art.bakeStatic in
+  // visuals.js). At STATIC_SCALE 0.5 that is 2800x2800, about 31MB.
+  staticImg = Art.bakeStatic();
 }
 
 function jitterAround(obj, r) {
@@ -2190,16 +2010,18 @@ function draw() {
   let srcY = cam.y * STATIC_SCALE;
   let srcW = (width / zoom) * STATIC_SCALE;
   let srcH = (height / zoom) * STATIC_SCALE;
-  image(staticImg, 0, 0, width, height, srcX, srcY, srcW, srcH);
+  drawingContext.drawImage(staticImg, srcX, srcY, srcW, srcH, 0, 0, width, height);
 
   push();
   scale(zoom);
   translate(-cam.x, -cam.y);
 
-  // Animated water surface effects (wavelets/caustics/motes)
-  lake.drawWaterEffects();
-  for (let c of cattails) { if (inView(c.x, c.y, c.h)) drawCattail(c); }
-  for (let w of weeds) { if (inView(w.x, w.y, w.h)) drawWeed(w); }
+  // Draw order, bottom to top: water shimmer and submerged weeds, fish,
+  // then everything that breaks the surface (foam, rocks, logs, snags,
+  // cattails), birds, lily pads, kayaks, and finally the tree canopies
+  // that lean out over the bank.
+  Art.drawWaterFx();
+  for (let w of weeds) { if (inView(w.x, w.y, w.h)) Art.drawWeed(w); }
 
   for (let i = ripples.length - 1; i >= 0; i--) {
     ripples[i].update();
@@ -2243,6 +2065,12 @@ function draw() {
     if (inView(b.pos.x, b.pos.y, 60)) b.draw();
   }
 
+  Art.drawShoreFoam();
+  for (let r of rocks) { if (inView(r.x, r.y, r.r * 2)) Art.drawRock(r); }
+  for (let l of logs)  { if (inView(l.x, l.y, l.len)) Art.drawLog(l); }
+  for (let sn of snags) { if (inView(sn.x, sn.y, 40)) Art.drawSnag(sn); }
+  for (let c of cattails) { if (inView(c.x, c.y, c.h + 12)) Art.drawCattail(c); }
+
   // Ducks — drift on the surface above the fish but under lily pads
   for (let d of ducks) {
     d.update();
@@ -2256,16 +2084,13 @@ function draw() {
   drawHatchZone();
 
   // lily pads on top so fish appear to swim under them
-  for (let lp of lilypads) { if (inView(lp.x, lp.y, lp.r * 1.5)) drawLilypad(lp); }
+  for (let lp of lilypads) { if (inView(lp.x, lp.y, lp.r * 1.5)) Art.drawLily(lp); }
 
   // kayak floats on top of lily pads (it's at the surface)
   player.draw();
 
-  // Ghost kayaks for everyone else in the derby — same layer as the local
-  // kayak, drawn with a translucent body + a name label above each.
+  // Everyone else in the derby — same layer as the local kayak.
   drawDerbyGhosts();
-  // Chat bubbles ride above ghost names; drawn for local + remote players.
-  drawChatBubbles();
 
   // Broadcast our own position + active cast + appearance to peers
   if (window.MP && MP.broadcastPosition) {
@@ -2284,28 +2109,52 @@ function draw() {
     if (cast.state === 'done') cast = null;
   }
 
+  // Tree canopies lean out over the bank, above everything on the water,
+  // and cloud shadows slide across the whole scene.
+  Art.drawCanopies();
+  Art.drawCloudShadows();
+
+  // Labels and meters go above the canopies so a tree never hides them.
+  drawGhostLabels();
+  drawChatBubbles();
+  if (cast) cast.drawHud();
+
   // Aim reticle — shown when no cast is active, OR during the back-and-
   // forth false-cast so mobile players dragging the cast button can see
   // where the fly will land. (The cast button drag-aim writes the target
-  // into window.mouseX/Y; this reads the same vars.)
+  // into window.mouseX/Y; this reads the same vars.) Sized in screen
+  // pixels so it stays readable at any zoom.
   if (!cast || cast.state === 'aerial') {
-    let wx = mouseX / zoom + cam.x;
-    let wy = mouseY / zoom + cam.y;
-    let onWater = lake.contains(wx, wy, 4);
-    let aiming = !!cast;
-    noFill();
-    stroke(onWater ? 'rgba(255,240,180,0.85)' : 'rgba(220,80,60,0.75)');
-    strokeWeight(aiming ? 1.6 : 1);
-    ellipse(wx, wy, aiming ? 18 : 12, aiming ? 18 : 12);
-    line(wx - 6, wy, wx + 6, wy);
-    line(wx, wy - 6, wx, wy + 6);
-    if (aiming) {
-      // Inner ring so the marker reads as a "lock-on" while charging
-      stroke(onWater ? 'rgba(255,240,180,0.45)' : 'rgba(220,80,60,0.4)');
-      strokeWeight(1);
-      ellipse(wx, wy, 32, 32);
+    const wx = mouseX / zoom + cam.x, wy = mouseY / zoom + cam.y;
+    const onWater = lake.contains(wx, wy, 4), aiming = !!cast;
+    const col = onWater ? '255,240,180' : '232,92,70';
+    const k = 1 / zoom, r0 = (aiming ? 9 : 6.5) * k;
+    const ctx = drawingContext;
+    ctx.save();
+    ctx.translate(wx, wy);
+    ctx.lineCap = 'round';
+    // Dark underlay first, then the bright mark, so it reads on any water.
+    for (const [style, lw] of [['rgba(0,12,14,0.45)', 3.2 * k], [`rgba(${col},0.95)`, 1.3 * k]]) {
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.arc(0, 0, r0, 0, TWO_PI);
+      for (let i = 0; i < 4; i++) {
+        const a = i * HALF_PI;
+        ctx.moveTo(Math.cos(a) * (r0 + 2.5 * k), Math.sin(a) * (r0 + 2.5 * k));
+        ctx.lineTo(Math.cos(a) * (r0 + 6.5 * k), Math.sin(a) * (r0 + 6.5 * k));
+      }
+      ctx.stroke();
     }
-    noStroke();
+    ctx.fillStyle = `rgba(${col},0.95)`;
+    ctx.beginPath(); ctx.arc(0, 0, 1.3 * k, 0, TWO_PI); ctx.fill();
+    if (aiming) {
+      // A slowly turning outer ring while the cast is charging.
+      ctx.rotate(frameCount * 0.03);
+      ctx.setLineDash([7 * k, 6 * k]);
+      ctx.strokeStyle = `rgba(${col},0.5)`; ctx.lineWidth = 1.1 * k;
+      ctx.beginPath(); ctx.arc(0, 0, 17 * k, 0, TWO_PI); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // Eagle body — drawn last so it flies above everything in the world.
@@ -2325,6 +2174,9 @@ function draw() {
   }
 
   pop();
+
+  // Vignette + a faint wash of sunlight over the finished frame.
+  Art.drawScreenFx();
 
   // ---- Derby HUD (timer + leaderboard) — only renders while a derby is live ----
   if (frameCount % 12 === 0) tickDerbyHud();
@@ -2366,7 +2218,9 @@ function draw() {
     if (fighting) {
       let tFill = document.getElementById('tension-fill');
       let sFill = document.getElementById('stamina-fill');
-      if (tFill) tFill.style.width = `${constrain(cast.tension * 100, 0, 100)}%`;
+      // The tension gradient is fixed to the track and revealed by a clip.
+      if (tFill) tFill.style.clipPath = `inset(0 ${100 - constrain(cast.tension * 100, 0, 100)}% 0 0)`;
+      fightUI.classList.toggle('danger', cast.tension > 0.85);
       if (sFill) sFill.style.width = `${constrain(cast.fishStamina * 100, 0, 100)}%`;
     }
   }
@@ -3073,76 +2927,6 @@ class Lake {
     }
     return this.randomInteriorPoint();
   }
-
-  drawBackground() {
-    let pal = lvl().palette;
-    background(pal.forest[0], pal.forest[1], pal.forest[2]);
-    if (zoom < 0.5) return;
-    noStroke();
-    for (let s of this.dirtSpecks) {
-      if (!inView(s.x, s.y, 10)) continue;
-      fill(s.c[0], s.c[1], s.c[2], 180);
-      ellipse(s.x, s.y, s.r);
-    }
-    for (let s of this.sandSpecks) {
-      if (!inView(s.x, s.y, 10)) continue;
-      fill(pal.sand[0], pal.sand[1], pal.sand[2], 140);
-      ellipse(s.x, s.y, s.r);
-    }
-  }
-
-  // Lightweight per-frame water effects layered on top of the pre-baked static
-  // image. No clip path — wavelets/caustics positions came from
-  // randomInteriorPoint() so they're already inside the lake polygon.
-  drawWaterEffects() {
-    if (zoom < 0.45) return;            // sub-pixel at low zoom; skip entirely
-    // p5's default stroke is black-1px enabled; without this every caustic
-    // got a thin dark outline that read as a black ring on dark green water.
-    noStroke();
-    let t = frameCount * 0.015;
-    const pal = lvl().palette;
-    const cauC = pal.caustic || [140, 195, 175];
-    const wavC = pal.wavelet || [180, 215, 200];
-
-    // Caustics — soft pulsing brighter circles
-    for (let c of this.caustics) {
-      if (!inView(c.x, c.y, c.size * 1.2)) continue;
-      let n = noise(c.x * 0.0025, c.y * 0.0025, t * 0.3 + c.seed);
-      if (n < 0.62) continue;
-      let alpha = (n - 0.62) * 60;
-      let drift = sin(t * 0.5 + c.seed * 6) * 3;
-      fill(cauC[0], cauC[1], cauC[2], alpha);
-      ellipse(c.x + drift, c.y - drift * 0.6, c.size * (0.7 + n * 0.5));
-    }
-
-    // Wavelet streak highlights — drifting downwind
-    let windX = cos(this.windAngle), windY = sin(this.windAngle);
-    strokeWeight(1.2);
-    for (let w of this.wavelets) {
-      if (!inView(w.x, w.y, w.len)) continue;
-      let n = noise(w.x * 0.0035, w.y * 0.0035, t + w.seed * 0.5);
-      if (n < 0.66) continue;
-      let alpha = (n - 0.66) * 200;
-      let driftMag = (t * 10 + w.seed * 30) % 60;
-      let dx = windX * driftMag - windX * 30;
-      let dy = windY * driftMag - windY * 30;
-      let lx = w.x + dx, ly = w.y + dy;
-      stroke(wavC[0], wavC[1], wavC[2], alpha);
-      let edx = cos(w.a) * w.len * 0.5;
-      let edy = sin(w.a) * w.len * 0.5;
-      line(lx - edx, ly - edy, lx + edx, ly + edy);
-    }
-    noStroke();
-
-    // Surface motes — algae specks on bass lake, glittering droplets on alpine
-    let mp = lvl().palette.ambient;
-    for (let p of this.shimmerPoints) {
-      if (!inView(p.x, p.y, 12)) continue;
-      let a = noise(p.x * 0.01, p.y * 0.01, frameCount * 0.008);
-      fill(mp[0], mp[1], mp[2], a * 35);
-      ellipse(p.x, p.y, 4 + a * 6, 2 + a * 3);
-    }
-  }
 }
 
 // ---------- FISH species config ----------
@@ -3573,133 +3357,24 @@ class Panfish {
   }
 
   draw() {
-    // Top-down view through the water surface: fish are only visible if they
-    // are near the surface. Below the visibility threshold they're completely
-    // invisible — the player has to read ripples and wakes instead.
-    // Alpine water is clear — fish stay visible deeper than in bass lake.
+    // Looking down through the surface: a fish only shows when it is near
+    // the top, as a dark shadow that sharpens as it rises. Deeper than the
+    // level's visibility depth it is hidden entirely — the player reads
+    // rises and wakes instead. (Alpine water is clear, so fish show deeper.)
     const SURFACE_Z = (lvl().palette.fishVisDepth) || 0.18;
     if (this.z >= SURFACE_Z) return;
-    let surfaceVis = pow(1 - this.z / SURFACE_Z, 2);  // 1 at z=0, 0 at z=SURFACE_Z
-
-    push();
-    translate(this.pos.x, this.pos.y);
-    rotate(this.vel.heading());
-    let s = this.size;
-    let aspect = this.cfg.bodyAspect;
-    let tailW = sin(this.wiggle) * 0.4;
-    let baseShadow = 80 * surfaceVis;
-
-    noStroke();
-    fill(0, 10, 18, baseShadow);
-    ellipse(0, 0, s * 2.0, s * 0.95 * aspect / 0.62);
-    fill(0, 6, 14, baseShadow * 0.85);
-    ellipse(0, 0, s * 1.45, s * 0.68 * aspect / 0.62);
-    push();
-    translate(-s * 0.7, 0);
-    rotate(tailW);
-    fill(0, 10, 18, baseShadow * 0.7);
-    triangle(0, 0, -s * 0.4, -s * 0.25, -s * 0.4, s * 0.25);
-    pop();
-    pop();
-  }
-
-  _drawBluegill(s, aspect, tailW) {
-    let bw = s * 1.6, bh = s * 1.6 * aspect;
-    fill(55, 75, 50);
-    ellipse(0, 0, bw, bh);
-    fill(35, 55, 45, 220);
-    ellipse(-s * 0.05, 0, bw * 0.85, bh * 0.32);
-    // faint vertical bars
-    fill(30, 50, 40, 130);
-    for (let i = -2; i <= 2; i++) {
-      ellipse(i * bw * 0.18, 0, bw * 0.06, bh * 0.85);
-    }
-    // dark gill flap "ear" — signature bluegill mark
-    fill(15, 25, 35);
-    ellipse(s * 0.32, -bh * 0.42, s * 0.22, s * 0.16);
-    ellipse(s * 0.32,  bh * 0.42, s * 0.22, s * 0.16);
-    // hint of orange-yellow belly seeping past sides
-    fill(230, 170, 80, 110);
-    ellipse(-s * 0.1, 0, bw * 0.6, bh * 0.35);
-    fill(50, 70, 48);
-    push();
-    translate(-bw * 0.45, 0);
-    rotate(tailW);
-    triangle(0, 0, -s * 0.45, -s * 0.32, -s * 0.45, s * 0.32);
-    pop();
-    fill(0);
-    ellipse(s * 0.55, -bh * 0.28, s * 0.1);
-    ellipse(s * 0.55,  bh * 0.28, s * 0.1);
-  }
-
-  _drawPumpkinseed(s, aspect, tailW) {
-    let bw = s * 1.55, bh = s * 1.55 * aspect;
-    fill(75, 110, 55);
-    ellipse(0, 0, bw, bh);
-    fill(50, 80, 45, 220);
-    ellipse(-s * 0.05, 0, bw * 0.85, bh * 0.3);
-    // bright orange flecks scattered across back
-    fill(230, 110, 50);
-    let flecks = [
-      [-bw * 0.15, -bh * 0.15], [bw * 0.10, bh * 0.20], [-bw * 0.05, bh * 0.10],
-      [bw * 0.20, -bh * 0.10],  [-bw * 0.25, bh * 0.05], [bw * 0.0, -bh * 0.25],
-    ];
-    for (let f of flecks) ellipse(f[0], f[1], s * 0.16, s * 0.16);
-    // red gill cover spot — pumpkinseed signature
-    fill(220, 60, 50);
-    ellipse(s * 0.34, -bh * 0.38, s * 0.18, s * 0.14);
-    ellipse(s * 0.34,  bh * 0.38, s * 0.18, s * 0.14);
-    // wavy blue cheek hints
-    fill(80, 130, 200, 180);
-    ellipse(s * 0.42, -bh * 0.18, s * 0.12, s * 0.06);
-    ellipse(s * 0.42,  bh * 0.18, s * 0.12, s * 0.06);
-    fill(70, 100, 50);
-    push();
-    translate(-bw * 0.45, 0);
-    rotate(tailW);
-    triangle(0, 0, -s * 0.45, -s * 0.32, -s * 0.45, s * 0.32);
-    fill(220, 130, 60, 200);
-    triangle(-s * 0.3, -s * 0.22, -s * 0.45, -s * 0.32, -s * 0.45, s * 0.32);
-    pop();
-    fill(0);
-    ellipse(s * 0.52, -bh * 0.28, s * 0.1);
-    ellipse(s * 0.52,  bh * 0.28, s * 0.1);
-  }
-
-  _drawCrappie(s, aspect, tailW) {
-    let bw = s * 1.85, bh = s * 1.85 * aspect;
-    fill(140, 150, 145);
-    ellipse(0, 0, bw, bh);
-    fill(60, 75, 65, 230);
-    ellipse(-s * 0.05, 0, bw * 0.85, bh * 0.32);
-    // mottled black blotches characteristic of black crappie
-    fill(30, 40, 35, 220);
-    let blotches = [
-      [-bw * 0.30, 0],          [-bw * 0.10, -bh * 0.18], [-bw * 0.10, bh * 0.18],
-      [bw * 0.10, 0],           [bw * 0.25, -bh * 0.12],  [bw * 0.0, bh * 0.05],
-      [-bw * 0.20, bh * 0.05],
-    ];
-    for (let b of blotches) ellipse(b[0], b[1], s * 0.22, s * 0.18);
-    // long dorsal fin running down back
-    fill(50, 65, 55, 200);
-    ellipse(-s * 0.15, 0, bw * 0.6, bh * 0.18);
-    fill(160, 170, 165);
-    ellipse(s * 0.55, 0, bw * 0.55, bh * 0.85);
-    fill(110, 120, 115);
-    push();
-    translate(-bw * 0.5, 0);
-    rotate(tailW);
-    triangle(0, -s * 0.05, -s * 0.5, -s * 0.4, -s * 0.5, s * 0.4);
-    fill(80, 90, 85);
-    triangle(-s * 0.1, 0, -s * 0.42, -s * 0.32, -s * 0.42, s * 0.32);
-    pop();
-    // larger eyes (crappie are night feeders)
-    fill(255, 230, 130);
-    ellipse(s * 0.62, -bh * 0.30, s * 0.16);
-    ellipse(s * 0.62,  bh * 0.30, s * 0.16);
-    fill(0);
-    ellipse(s * 0.62, -bh * 0.30, s * 0.09);
-    ellipse(s * 0.62,  bh * 0.30, s * 0.09);
+    const vis = pow(1 - this.z / SURFACE_Z, 2);   // 1 at the surface, 0 at the cutoff
+    // Drawn length is 1.3 x size: a bluegill comes out 12-16 units against
+    // a 57-unit kayak. That is still a few times life size so it can be
+    // seen from this height, but every species keeps its place — panfish
+    // smaller than trout, trout smaller than bass, nothing longer than the boat.
+    const L = this.size * 1.3, ctx = drawingContext;
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(this.vel.heading());
+    Art.fishShadow(ctx, L, L * 0.24 * this.cfg.bodyAspect / 0.62,
+      sin(this.wiggle) * 0.4, 0.52 * vis, vis);
+    ctx.restore();
   }
 }
 
@@ -3875,35 +3550,23 @@ class Bass {
   }
 
   draw() {
-    // Bass are only visible from above when they surge near the surface during a
-    // strike. Otherwise they're completely hidden below. Alpine water is
-    // clearer so the predator silhouette stays visible deeper.
+    // Predators only show from above when they surge toward the surface on
+    // a strike; otherwise they stay hidden below. Clear alpine water keeps
+    // the silhouette visible deeper. Pike and pickerel are far longer and
+    // leaner than bass, which bodyAspect carries.
     const SURFACE_Z = (lvl().palette.predatorVisDepth) || 0.22;
     if (this.z >= SURFACE_Z) return;
-    let surfaceVis = pow(1 - this.z / SURFACE_Z, 2);
-
-    push();
-    translate(this.pos.x, this.pos.y);
-    let heading = this.vel.mag() > 0.01 ? this.vel.heading() : 0;
-    rotate(heading);
-    let s = this.size;
-    let tailW = sin(this.wiggle) * (this.dashing ? 0.35 : 0.18);
-    let baseA = 130 * surfaceVis;
-
-    // Body aspect: pike/pickerel are much more elongated than bass.
+    const vis = pow(1 - this.z / SURFACE_Z, 2);
     const aspect = this.bodyAspect || 0.36;
-    noStroke();
-    fill(0, 6, 14, baseA * 0.7);
-    ellipse(0, 0, s * 2.6, s * 2.6 * aspect * 1.1);
-    fill(0, 5, 12, baseA);
-    ellipse(0, 0, s * 2.0, s * 2.0 * aspect);
-    push();
-    translate(-s * 0.85, 0);
-    rotate(tailW);
-    fill(0, 6, 14, baseA * 0.85);
-    triangle(0, 0, -s * 0.55, -s * 0.55 * aspect * 1.3, -s * 0.55, s * 0.55 * aspect * 1.3);
-    pop();
-    pop();
+    // Same scale as the panfish: a big largemouth is about half the
+    // kayak's length, a trophy pike about three quarters.
+    const L = this.size * 1.05, ctx = drawingContext;
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(this.vel.mag() > 0.01 ? this.vel.heading() : 0);
+    Art.fishShadow(ctx, L, L * aspect * 0.45,
+      sin(this.wiggle) * (this.dashing ? 0.35 : 0.18), 0.62 * vis, vis);
+    ctx.restore();
   }
 }
 
@@ -4014,116 +3677,19 @@ class Kayak {
   }
 
   draw() {
-    push();
-    translate(this.pos.x, this.pos.y);
-    rotate(this.heading);
-    let s = this.size;
-
-    // Persistent V-wake when moving — light streaks behind hull
-    let speed = this.vel.mag();
-    if (speed > 0.4) {
-      noFill();
-      stroke(220, 235, 245, 120);
-      strokeWeight(1.2);
-      let trail = constrain(speed * 4, 6, 24);
-      for (let i = 0; i < 2; i++) {
-        let offX = -s * 0.95 - i * 8;
-        let spread = 5 + i * 4 + speed * 2;
-        line(offX, -spread, offX - trail, -spread - trail * 0.5);
-        line(offX,  spread, offX - trail,  spread + trail * 0.5);
-      }
-      noStroke();
-    }
-
-    // Hull shadow on water
-    noStroke();
-    fill(0, 0, 0, 90);
-    ellipse(2, 4, s * 2.7, s * 0.95);
-
-    // Hull — long elongated shape. Colors pull from the player's chosen
-    // palette so each angler reads as their own kayak in a derby.
-    const hp  = HULL_PALETTES[playerAppearance.hull] || HULL_PALETTES.navy;
-    const pp  = PFD_PALETTES [playerAppearance.pfd]  || PFD_PALETTES.orange;
-    const hat = HAT_PALETTES [playerAppearance.hat]  || HAT_PALETTES.green;
-    fill(...hp.base);
-    ellipse(0, 0, s * 2.5, s * 0.8);
-    // accent stripe along upper edge (visible from above)
-    fill(...hp.accent);
-    ellipse(0, -s * 0.18, s * 2.3, s * 0.16);
-    // hull lip / rim
-    fill(...hp.dark);
-    ellipse(0, 0, s * 2.5, s * 0.8);
-    fill(...hp.light);
-    ellipse(0, -s * 0.02, s * 2.2, s * 0.55);
-
-    // cockpit opening (where the paddler sits) — dark oval
-    fill(15, 20, 28);
-    ellipse(s * 0.05, 0, s * 0.85, s * 0.42);
-
-    // paddler torso + life jacket
-    fill(...pp.base);
-    ellipse(s * 0.05, 0, s * 0.55, s * 0.4);
-    fill(...pp.dark);                    // shadow side
-    arc(s * 0.05, 0, s * 0.55, s * 0.4, -PI / 2, PI / 2);
-
-    // arms — thin segments holding the paddle shaft
-    let armReach = s * 0.18;
-    let armSpread = sin(this.paddlePhase) * s * 0.12;
-    fill(pp.dark[0] - 10, pp.dark[1] - 10, pp.dark[2] - 10);
-    ellipse(s * 0.10,  armReach + armSpread * 0.3, s * 0.15, s * 0.12);
-    ellipse(s * 0.10, -armReach - armSpread * 0.3, s * 0.15, s * 0.12);
-
-    // head (tan skin tone) + cap (chosen hat color)
-    fill(225, 195, 155);
-    ellipse(s * 0.05, 0, s * 0.28, s * 0.28);
-    fill(...hat);
-    arc(s * 0.05, 0, s * 0.30, s * 0.30, PI, TWO_PI);
-
-    // PADDLE — alternates sides each stroke. Visible blade dipped in water on
-    // the active side, other blade lifted across the bow.
-    let phase = this.paddlePhase;
-    let stroke01 = (Math.sin(phase) + 1) / 2;       // 0..1, switches sides
-    let activeSide = Math.sin(phase) > 0 ? 1 : -1;
-    let crossT = Math.cos(phase) * 0.5 + 0.5;       // 0..1 sweep position
-
-    // Paddle shaft (across the kayak)
-    stroke(60, 40, 25);
-    strokeWeight(2.4);
-    let shaftX = s * 0.05;
-    let shaftY1 = -s * 0.85 - crossT * s * 0.2;
-    let shaftY2 =  s * 0.85 + crossT * s * 0.2;
-    if (activeSide < 0) {
-      shaftY1 = -s * 0.85 - (1 - crossT) * s * 0.2;
-      shaftY2 =  s * 0.85 + (1 - crossT) * s * 0.2;
-    }
-    line(shaftX, shaftY1, shaftX, shaftY2);
-    noStroke();
-
-    // Paddle blades on each end
-    let bladeW = s * 0.5, bladeH = s * 0.22;
-    push();
-    translate(shaftX, shaftY1);
-    rotate(0.2);
-    fill(80, 55, 35);
-    ellipse(0, -bladeH * 0.4, bladeW * 0.9, bladeH);
-    pop();
-    push();
-    translate(shaftX, shaftY2);
-    rotate(-0.2);
-    fill(80, 55, 35);
-    ellipse(0,  bladeH * 0.4, bladeW * 0.9, bladeH);
-    pop();
-
-    // Splashes near the active blade when paddling
-    if (speed > 0.3 && Math.abs(Math.sin(phase)) > 0.7) {
-      let sx = shaftX;
-      let sy = activeSide > 0 ? shaftY2 : shaftY1;
-      fill(220, 235, 245, 180);
-      ellipse(sx + random(-2, 2), sy + random(-2, 2), 4, 4);
-      ellipse(sx + random(-3, 3), sy + random(-3, 3), 3, 3);
-    }
-
-    pop();
+    const ctx = drawingContext, s = this.size, speed = this.vel.mag();
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(this.heading);
+    Art.kayakWake(ctx, s, speed);
+    // Hull, paddler and paddle come from the shared painter, in the
+    // player's chosen colors. With a cast out, the paddle rests across the
+    // lap and the rod comes up.
+    Art.kayak(ctx, s, playerAppearance, {
+      heading: this.heading, paddlePhase: this.paddlePhase, speed,
+      casting: !!cast && cast.state !== 'done',
+    });
+    ctx.restore();
   }
 }
 
@@ -4261,13 +3827,15 @@ class Duck {
     push();
     translate(this.pos.x, this.pos.y);
     rotate(this.heading);
-    let s = this.size;
+    // Drawn at half the simulation size: about 20 units bill to tail, a
+    // third of the kayak. (Still roughly double life size, like the fish.)
+    let s = this.size * 0.5;
 
     // ---- FLYING / FLUSHING form: viewed top-down with wings spread ----
     if (this.state === 'flying' || this.state === 'flushing') {
       // shadow on water — slides ahead as the bird gains altitude
       let alt = this.altitude;
-      let shadowOff = alt * 22;
+      let shadowOff = alt * 16;
       let shadowAlpha = 70 * (1 - alt * 0.6);
       noStroke();
       fill(0, 0, 0, shadowAlpha);
@@ -4343,10 +3911,11 @@ class Duck {
 
     if (this.dabble < 0.4) {
       noFill();
-      stroke(220, 235, 245, 90);
+      const wk = lvl().palette.ripple || [220, 235, 245];
+      stroke(wk[0], wk[1], wk[2], 100);
       strokeWeight(0.6);
-      line(-bw * 0.5, -3, -bw * 0.95, -7);
-      line(-bw * 0.5,  3, -bw * 0.95,  7);
+      line(-bw * 0.5, -bh * 0.25, -bw * 1.0, -bh * 0.62);
+      line(-bw * 0.5,  bh * 0.25, -bw * 1.0,  bh * 0.62);
       noStroke();
     }
     pop();
@@ -4483,7 +4052,7 @@ class Eagle {
     if (this.state === 'done') return;
     let off = this.altitude * 28;
     let alpha = 90 * (1 - this.altitude * 0.55);
-    let sz = this.size * (1.5 - this.altitude * 0.5);
+    let sz = this.size * 0.55 * (1.5 - this.altitude * 0.5);
     noStroke();
     fill(0, 0, 0, alpha);
     ellipse(this.pos.x + off * 0.5, this.pos.y + off * 0.7, sz, sz * 0.45);
@@ -4494,7 +4063,8 @@ class Eagle {
     push();
     translate(this.pos.x, this.pos.y);
     rotate(this.angle);
-    let s = this.size * (1.4 - this.altitude * 0.5);
+    // Drawn at 0.55 x simulation size so the bird is in scale with the kayak.
+    let s = this.size * 0.55 * (1.4 - this.altitude * 0.5);
     // sin(phase) is the beat — positive = downstroke (wing flat, broad
     // from above), negative = upstroke (wing tilted up, narrower).
     let beat = (this.flapMode === 'flapping') ? Math.sin(this.flapPhase) : 0;
@@ -5067,139 +4637,178 @@ class FlyCast {
     this.state = 'done';
   }
 
+  // Fly line and fly. The meters and the cast-quality call-out are drawn
+  // separately by drawHud(), above the tree canopies.
   draw() {
     if (this.state === 'done') return;
-    let r = this._rodTip();
+    const r = this._rodTip(), ctx = drawingContext, pal = lvl().palette;
+    const dx = this.flyX - r.x, dy = this.flyY - r.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
 
-    // ---- Aerial HUD: power meter + timing meter above the kayak ----
+    // How far the line bows sideways depends on what it is doing: a loaded
+    // loop in the air, a slight belly on delivery, a lazy drift on the
+    // water, or bar-taut and humming with a fish on.
+    let bow, lw, alpha, airborne = false;
     if (this.state === 'aerial') {
-      // Line-length / power bar
-      let pct = (this.lineLength - 70) / (this.maxLineLength - 70);
-      pct = constrain(pct, 0, 1);
-      noStroke();
-      fill(0, 0, 0, 140);
-      rect(player.pos.x - 28, player.pos.y - 44, 56, 6, 2);
-      fill(255, 200, 80);
-      rect(player.pos.x - 27, player.pos.y - 43, 54 * pct, 4, 1);
-
-      // Timing rhythm bar — sweet spot highlighted; sliding cursor
-      let bx = player.pos.x - 28, by = player.pos.y - 34, bw = 56, bh = 7;
-      fill(0, 0, 0, 150);
-      rect(bx, by, bw, bh, 2);
-      // sweet spot band
-      let sStart = this.sweetCenter - this.sweetWidth / 2;
-      let sEnd   = this.sweetCenter + this.sweetWidth / 2;
-      fill(120, 220, 110, 220);
-      rect(bx + sStart * bw, by + 1, (sEnd - sStart) * bw, bh - 2, 1);
-      // sliding cursor
-      fill(255, 245, 220);
-      let cx = bx + this.timingPhase * bw;
-      rect(cx - 1, by - 1, 2, bh + 2);
-    }
-
-    // Cast-quality feedback floats briefly above the kayak after release.
-    if (this.qualityLabel && frameCount - this.qualityLabelAt < 60) {
-      let age = frameCount - this.qualityLabelAt;
-      let alpha = (1 - age / 60) * 255;
-      let yOff = -54 - age * 0.4;
-      let col = this.qualityLabel === 'PERFECT' ? [255, 230, 150]
-              : this.qualityLabel === 'GOOD'    ? [180, 230, 170]
-              : this.qualityLabel === 'OK'      ? [220, 220, 200]
-              : [255, 150, 130];
-      noStroke();
-      fill(col[0], col[1], col[2], alpha);
-      textAlign(CENTER, BOTTOM);
-      textSize(10);
-      textStyle(BOLD);
-      text(this.qualityLabel, player.pos.x, player.pos.y + yOff);
-      textStyle(NORMAL);
-    }
-
-    // FLY LINE
-    stroke(30, 22, 15, 220);
-    if (this.state === 'aerial') {
-      // curved line in the air, perpendicular bow grows with swing speed
-      strokeWeight(1.0);
-      noFill();
-      let dx = this.flyX - r.x, dy = this.flyY - r.y;
-      let len = Math.hypot(dx, dy) || 1;
-      let nx = -dy / len, ny = dx / len;
-      // bow curve oscillates with the swing — strongest near zero crossings
-      let bow = Math.cos(this.aerialPhase) * 26 * (this.lineLength / this.maxLineLength + 0.2);
-      let mx = (r.x + this.flyX) / 2 + nx * bow;
-      let my = (r.y + this.flyY) / 2 + ny * bow;
-      beginShape();
-      vertex(r.x, r.y);
-      quadraticVertex(mx, my, this.flyX, this.flyY);
-      endShape();
-      // small white loop at the tip — the leader unfurling
-      noStroke();
-      fill(240, 240, 230, 180);
-      ellipse(this.flyX, this.flyY, 3, 3);
+      bow = Math.cos(this.aerialPhase) * 26 * (this.lineLength / this.maxLineLength + 0.2);
+      lw = 1.2; alpha = 0.95; airborne = true;
     } else if (this.state === 'delivering') {
-      strokeWeight(1.0);
-      noFill();
-      // line shoots out, slight bow in flight direction
-      let dx = this.flyX - r.x, dy = this.flyY - r.y;
-      let len = Math.hypot(dx, dy) || 1;
-      let nx = -dy / len, ny = dx / len;
-      let bow = (this.airHeight || 0) * 14;
-      let mx = (r.x + this.flyX) / 2 + nx * bow;
-      let my = (r.y + this.flyY) / 2 + ny * bow;
-      beginShape();
-      vertex(r.x, r.y);
-      quadraticVertex(mx, my, this.flyX, this.flyY);
-      endShape();
+      bow = (this.airHeight || 0) * 14;
+      lw = 1.2; alpha = 0.95; airborne = true;
+    } else if (this.state === 'hooked') {
+      bow = Math.sin(frameCount * 0.6) * 1.2 * Math.min(1, this.tension);
+      lw = 1.0; alpha = 0.92;
     } else {
-      // line laid on water — slight drift curve
-      strokeWeight(0.7);
-      noFill();
-      let dx = this.flyX - r.x, dy = this.flyY - r.y;
-      let len = Math.hypot(dx, dy) || 1;
-      let nx = -dy / len, ny = dx / len;
-      let driftBow = Math.sin(frameCount * 0.04 + this.driftSeed) * 3;
-      let mx = (r.x + this.flyX) / 2 + nx * driftBow;
-      let my = (r.y + this.flyY) / 2 + ny * driftBow;
-      beginShape();
-      vertex(r.x, r.y);
-      quadraticVertex(mx, my, this.flyX, this.flyY);
-      endShape();
+      bow = Math.sin(frameCount * 0.04 + this.driftSeed) * 3;
+      lw = 0.9; alpha = 0.8;
     }
-    noStroke();
+    const mx = (r.x + this.flyX) / 2 + nx * bow;
+    const my = (r.y + this.flyY) / 2 + ny * bow;
+    const trace = (ox, oy) => {
+      ctx.beginPath();
+      ctx.moveTo(r.x + ox * 0.6, r.y + oy * 0.6);
+      ctx.quadraticCurveTo(mx + ox, my + oy, this.flyX + ox, this.flyY + oy);
+      ctx.stroke();
+    };
 
-    // FLY (visible only when on water or just landed)
-    if (this.state === 'fishing' || this.state === 'reeling' || this.state === 'delivering' || this.state === 'hooked') {
-      let cfg = this.cfg;
-      // dimple (water tension ring) under the fly — bigger for heavy flies
-      let dimpleR = cfg.sinks ? 7 : 5;
-      noFill();
-      stroke(255, 255, 255, 90);
-      strokeWeight(0.6);
-      ellipse(this.flyX, this.flyY, dimpleR, dimpleR * 0.8);
-      noStroke();
-      // fly body — color from fly type
-      fill(cfg.flyColor[0], cfg.flyColor[1], cfg.flyColor[2]);
-      let bodyW = this.flyType === 'woolyBugger' ? 5 : (this.flyType === 'nymph' ? 3.5 : 2.5);
-      ellipse(this.flyX, this.flyY, bodyW, bodyW);
-      // hackle / legs / streamer tail
-      stroke(cfg.legsColor[0], cfg.legsColor[1], cfg.legsColor[2], 220);
-      strokeWeight(0.5);
-      if (this.flyType === 'woolyBugger') {
-        // long streamer tail trailing back toward kayak
-        let r = this._rodTip();
-        let dx = this.flyX - r.x, dy = this.flyY - r.y;
-        let len = Math.hypot(dx, dy) || 1;
-        let nx = -dx / len, ny = -dy / len;   // back toward rod
-        for (let i = 0; i < 4; i++) {
-          line(this.flyX, this.flyY,
-               this.flyX + nx * 6 + (i - 1.5) * 1.2, this.flyY + ny * 6 + (i - 1.5) * 1.2);
-        }
-      } else {
-        // tuft hackles
-        line(this.flyX - 2.5, this.flyY - 1, this.flyX + 2.5, this.flyY + 1);
-        line(this.flyX - 2, this.flyY + 1, this.flyX + 2, this.flyY - 1);
+    // Line color comes from the level so it shows on that water. With a fish
+    // on it shifts toward red as tension climbs — the same warning the
+    // tension bar gives, right where the player is looking.
+    let col = pal.flyLine || [236, 228, 150];
+    if (this.state === 'hooked') {
+      const k = constrain((this.tension - 0.55) / 0.4, 0, 1);
+      col = [lerp(col[0], 255, k), lerp(col[1], 84, k), lerp(col[2], 62, k)];
+    }
+    ctx.save();
+    ctx.lineCap = 'round';
+    if (airborne) {                       // shadow of the line on the water
+      ctx.strokeStyle = 'rgba(0,12,14,0.16)'; ctx.lineWidth = 1.6;
+      trace(5, 8);
+    }
+    ctx.strokeStyle = 'rgba(0,10,12,0.32)'; ctx.lineWidth = lw + 1.3;
+    trace(0, 0);
+    ctx.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha})`; ctx.lineWidth = lw;
+    trace(0, 0);
+
+    const fx = this.flyX, fy = this.flyY, cfg = this.cfg;
+    const fc = `rgb(${cfg.flyColor[0]},${cfg.flyColor[1]},${cfg.flyColor[2]})`;
+    const lc = `rgba(${cfg.legsColor[0]},${cfg.legsColor[1]},${cfg.legsColor[2]},0.9)`;
+    const dot = (x, y, rad) => { ctx.beginPath(); ctx.arc(x, y, rad, 0, TWO_PI); ctx.fill(); };
+
+    if (this.state === 'aerial') {
+      // In the air the fly is just a speck at the end of the leader.
+      ctx.fillStyle = 'rgba(245,245,232,0.85)';
+      dot(fx, fy, 1.4);
+    } else {
+      const rc = pal.ripple || [220, 240, 255];
+      if (this.state !== 'delivering') {
+        // The dimple where it sits in the surface film, breathing slowly.
+        const breathe = 0.5 + 0.5 * Math.sin(frameCount * 0.06 + this.driftSeed);
+        ctx.strokeStyle = `rgba(${rc[0]},${rc[1]},${rc[2]},${0.26 + breathe * 0.16})`;
+        ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.arc(fx, fy, (cfg.sinks ? 4.6 : 3.6) + breathe * 1.4, 0, TWO_PI); ctx.stroke();
       }
-      noStroke();
+      if (this.flyType === 'woolyBugger') {
+        // Streamer: a marabou tail pulsing back toward the rod, a fat
+        // body, a bead of a head.
+        const bx = -dx / len, by = -dy / len;
+        ctx.strokeStyle = lc; ctx.lineWidth = 0.7;
+        for (let i = 0; i < 5; i++) {
+          const wob = Math.sin(frameCount * 0.25 + i * 1.3) * 1.2;
+          const spread = (i - 2) * 0.9;
+          ctx.beginPath();
+          ctx.moveTo(fx + bx * 1.5, fy + by * 1.5);
+          ctx.quadraticCurveTo(fx + bx * 5 + nx * (spread + wob), fy + by * 5 + ny * (spread + wob),
+            fx + bx * 9 + nx * spread * 1.6, fy + by * 9 + ny * spread * 1.6);
+          ctx.stroke();
+        }
+        ctx.fillStyle = fc;
+        ctx.beginPath(); ctx.ellipse(fx, fy, 3, 2, Math.atan2(dy, dx), 0, TWO_PI); ctx.fill();
+        ctx.fillStyle = 'rgba(20,16,12,0.9)';
+        dot(fx - bx * 2.4, fy - by * 2.4, 1.1);
+      } else if (this.flyType === 'nymph') {
+        // Nymph: slim segmented body under the film, gold bead up front.
+        const bx = -dx / len, by = -dy / len;
+        ctx.fillStyle = 'rgba(0,14,18,0.35)';
+        dot(fx + 0.8, fy + 1.2, 2.6);
+        ctx.fillStyle = fc;
+        ctx.beginPath(); ctx.ellipse(fx, fy, 2.6, 1.5, Math.atan2(dy, dx), 0, TWO_PI); ctx.fill();
+        ctx.strokeStyle = lc; ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(fx + nx * 1.5, fy + ny * 1.5); ctx.lineTo(fx - nx * 1.5, fy - ny * 1.5);
+        ctx.stroke();
+        ctx.fillStyle = 'rgb(226,186,84)';
+        dot(fx - bx * 2.2, fy - by * 2.2, 1.0);
+      } else {
+        // Dry fly: a wheel of hackle riding on the surface, pale wing post.
+        ctx.strokeStyle = lc; ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * TWO_PI + this.driftSeed;
+          ctx.moveTo(fx + Math.cos(a) * 1, fy + Math.sin(a) * 1);
+          ctx.lineTo(fx + Math.cos(a) * 3.4, fy + Math.sin(a) * 3.4);
+        }
+        ctx.stroke();
+        ctx.fillStyle = fc;
+        dot(fx, fy, 1.5);
+        ctx.fillStyle = 'rgba(245,242,228,0.95)';
+        dot(fx - 0.3, fy - 0.4, 0.8);
+      }
+    }
+    ctx.restore();
+  }
+
+  // Cast meters above the kayak, plus the PERFECT / GOOD / OK call-out.
+  drawHud() {
+    if (this.state === 'done') return;
+    const ctx = drawingContext, px = player.pos.x, py = player.pos.y;
+
+    if (this.state === 'aerial') {
+      const bw = 58, bx = px - bw / 2;
+      ctx.save();
+      // Line out — how far this cast will carry.
+      const pct = constrain((this.lineLength - 70) / (this.maxLineLength - 70), 0, 1);
+      ctx.fillStyle = 'rgba(8,18,16,0.72)';
+      Art.roundRect(ctx, bx - 1.5, py - 46.5, bw + 3, 8, 4); ctx.fill();
+      if (pct > 0.02) {
+        const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+        g.addColorStop(0, 'rgb(236,170,62)'); g.addColorStop(1, 'rgb(255,226,128)');
+        ctx.fillStyle = g;
+        Art.roundRect(ctx, bx, py - 45, Math.max(5, bw * pct), 5, 2.5); ctx.fill();
+      }
+      // Rhythm — release while the marker is inside the green band.
+      const by = py - 35, bh = 7;
+      ctx.fillStyle = 'rgba(8,18,16,0.72)';
+      Art.roundRect(ctx, bx - 1.5, by - 1.5, bw + 3, bh + 3, 5); ctx.fill();
+      const sStart = this.sweetCenter - this.sweetWidth / 2;
+      const inSweet = Math.abs(this.timingPhase - this.sweetCenter) <= this.sweetWidth / 2;
+      ctx.fillStyle = inSweet ? 'rgb(150,240,132)' : 'rgba(110,205,104,0.85)';
+      Art.roundRect(ctx, bx + sStart * bw, by, this.sweetWidth * bw, bh, 2.5); ctx.fill();
+      const cx = bx + this.timingPhase * bw;
+      ctx.fillStyle = 'rgba(0,10,10,0.55)';
+      ctx.fillRect(cx - 2, by - 2, 4, bh + 4);
+      ctx.fillStyle = 'rgb(255,248,226)';
+      ctx.fillRect(cx - 1, by - 2, 2, bh + 4);
+      ctx.restore();
+    }
+
+    if (this.qualityLabel && frameCount - this.qualityLabelAt < 60) {
+      const age = frameCount - this.qualityLabelAt;
+      const fade = 1 - age / 60;
+      const col = this.qualityLabel === 'PERFECT' ? '255,230,150'
+                : this.qualityLabel === 'GOOD'    ? '180,230,170'
+                : this.qualityLabel === 'OK'      ? '220,220,200'
+                : '255,150,130';
+      ctx.save();
+      ctx.font = '800 11px -apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = `rgba(6,16,14,${0.7 * fade})`; ctx.lineWidth = 3;
+      ctx.strokeText(this.qualityLabel, px, py - 54 - age * 0.4);
+      ctx.fillStyle = `rgba(${col},${fade})`;
+      ctx.fillText(this.qualityLabel, px, py - 54 - age * 0.4);
+      ctx.restore();
     }
   }
 }
@@ -5211,12 +4820,20 @@ class Ripple {
   }
   update() { this.r += 1.2; }
   draw() {
-    noFill();
+    // A crisp leading ring that thins as it spreads, with a fainter ring
+    // following inside it.
+    const k = 1 - this.r / this.maxR;
+    if (k <= 0) return;
     const c = lvl().palette.ripple || [220, 240, 255];
-    let a = map(this.r, 0, this.maxR, 220, 0);
-    stroke(c[0], c[1], c[2], a);
-    strokeWeight(1);
+    noFill();
+    stroke(c[0], c[1], c[2], 210 * k);
+    strokeWeight(0.6 + k);
     ellipse(this.x, this.y, this.r * 2);
+    if (this.r > 6) {
+      stroke(c[0], c[1], c[2], 90 * k);
+      strokeWeight(0.7);
+      ellipse(this.x, this.y, this.r * 1.3);
+    }
     noStroke();
   }
   dead() { return this.r > this.maxR; }
@@ -5232,45 +4849,17 @@ class Bubble {
   }
   update() { this.y += this.vy; this.life--; }
   draw() {
-    noFill();
     const c = lvl().palette.bubble || [220, 240, 255];
-    stroke(c[0], c[1], c[2], this.life * 3);
-    strokeWeight(1);
+    const a = Math.min(255, this.life * 3);
+    fill(c[0], c[1], c[2], a * 0.12);
+    stroke(c[0], c[1], c[2], a);
+    strokeWeight(0.8);
     ellipse(this.x, this.y, this.r * 2);
     noStroke();
+    fill(255, 255, 255, a * 0.7);          // glint
+    ellipse(this.x - this.r * 0.3, this.y - this.r * 0.35, this.r * 0.5);
   }
   dead() { return this.life <= 0; }
-}
-
-function drawLilypad(lp) {
-  push();
-  translate(lp.x, lp.y);
-  rotate(lp.a);
-  noStroke();
-  fill(0, 0, 0, 60);
-  ellipse(2, 3, lp.r * 2.1, lp.r * 1.7);
-  fill(45, 95, 50);
-  ellipse(0, 0, lp.r * 2, lp.r * 1.6);
-  fill(70, 130, 70);
-  arc(0, 0, lp.r * 1.9, lp.r * 1.5, -PI * 0.45, PI * 0.45, PIE);
-  // notch
-  fill(20, 60, 80);
-  triangle(0, 0, lp.r, -2, lp.r, 2);
-  pop();
-}
-
-function drawWeed(w) {
-  let sway = sin(frameCount * 0.02 + w.sway) * 4;
-  stroke(30, 80, 50, 180);
-  strokeWeight(2);
-  noFill();
-  beginShape();
-  vertex(w.x, w.y);
-  vertex(w.x + sway * 0.3, w.y - w.h * 0.4);
-  vertex(w.x + sway * 0.7, w.y - w.h * 0.75);
-  vertex(w.x + sway, w.y - w.h);
-  endShape();
-  noStroke();
 }
 
 function mousePressed() {
@@ -5297,212 +4886,6 @@ function mouseReleased() {
     cast.reeling = false;
     stopLoop('reel_loop');
   }
-}
-
-// ---- Environment props ----
-function drawTrees(canopyOnly) {
-  noStroke();
-  for (let t of trees) {
-    if (!inView(t.x, t.y, t.r * 1.2)) continue;
-    fill(40, 30, 22, 220);
-    ellipse(t.x, t.y, t.r * 0.35, t.r * 0.35);
-  }
-  for (let t of trees) {
-    if (!inView(t.x, t.y, t.r * 1.2)) continue;
-    fill(0, 0, 0, 60);
-    ellipse(t.x + 6, t.y + 8, t.r * 1.6, t.r * 1.4);
-    fill(t.hue - 10, t.val - 10, t.tone - 10);
-    ellipse(t.x, t.y, t.r * 1.7, t.r * 1.5);
-    for (let i = 0; i < 5; i++) {
-      let a = (i / 5) * TWO_PI + t.x * 0.01;
-      let dx = cos(a) * t.r * 0.45;
-      let dy = sin(a) * t.r * 0.4;
-      fill(t.hue, t.val, t.tone, 220);
-      ellipse(t.x + dx, t.y + dy, t.r * 0.85, t.r * 0.75);
-    }
-    fill(t.hue + 15, t.val + 25, t.tone + 5, 200);
-    ellipse(t.x - t.r * 0.2, t.y - t.r * 0.25, t.r * 0.6, t.r * 0.5);
-  }
-}
-
-function drawTreeShadows() {
-  // overhanging shadow over the water near the shore
-  noStroke();
-  for (let t of trees) {
-    if (!inView(t.x, t.y, t.r * 2.5)) continue;
-    let inAmt = lake.insideAmount(t.x, t.y);
-    // only trees near the water cast shadows onto it
-    if (inAmt > -150 && inAmt < 80) {
-      let inward = lake.inwardNormal(t.x, t.y);
-      let cx = t.x + inward.x * (t.r * 0.6);
-      let cy = t.y + inward.y * (t.r * 0.6);
-      fill(0, 10, 5, 70 * t.shade * 4);
-      ellipse(cx, cy, t.r * 1.8, t.r * 1.4);
-      fill(0, 10, 5, 30 * t.shade * 4);
-      ellipse(cx, cy, t.r * 2.6, t.r * 2.0);
-    }
-  }
-}
-
-function drawLog(l) {
-  push();
-  translate(l.x, l.y);
-  rotate(l.a);
-  noStroke();
-  // shadow in water
-  fill(0, 0, 0, 80);
-  ellipse(2, 4, l.len, l.thick * 1.3);
-  // log body
-  fill(75, 55, 35);
-  rect(-l.len / 2, -l.thick / 2, l.len, l.thick, l.thick * 0.4);
-  // bark texture lines
-  stroke(45, 30, 18, 200);
-  strokeWeight(1);
-  for (let i = -l.len / 2 + 6; i < l.len / 2 - 6; i += 8) {
-    line(i, -l.thick / 2 + 2, i, l.thick / 2 - 2);
-  }
-  noStroke();
-  // end caps — rings
-  fill(110, 80, 50);
-  ellipse(-l.len / 2 + 2, 0, l.thick * 0.9, l.thick);
-  ellipse(l.len / 2 - 2, 0, l.thick * 0.9, l.thick);
-  fill(70, 50, 30);
-  ellipse(-l.len / 2 + 2, 0, l.thick * 0.45, l.thick * 0.5);
-  ellipse(l.len / 2 - 2, 0, l.thick * 0.45, l.thick * 0.5);
-  pop();
-}
-
-function drawCattail(c) {
-  let sway = sin(frameCount * 0.018 + c.sway) * 5;
-  // stem
-  stroke(70, 110, 60, 220);
-  strokeWeight(1.5);
-  noFill();
-  beginShape();
-  vertex(c.x, c.y);
-  vertex(c.x + sway * 0.5, c.y - c.h * 0.6);
-  vertex(c.x + sway, c.y - c.h);
-  endShape();
-  // pod
-  noStroke();
-  fill(60, 35, 20);
-  ellipse(c.x + sway, c.y - c.h, 4, 10);
-  // tip
-  stroke(70, 110, 60, 220);
-  strokeWeight(1);
-  line(c.x + sway, c.y - c.h - 5, c.x + sway, c.y - c.h - 12);
-  noStroke();
-}
-
-function drawRock(r) {
-  noStroke();
-  fill(0, 0, 0, 70);
-  ellipse(r.x + 1, r.y + 2, r.r * 2.1, r.r * 1.4);
-  fill(r.shade, r.shade, r.shade);
-  ellipse(r.x, r.y, r.r * 2, r.r * 1.4);
-  fill(r.shade + 30, r.shade + 30, r.shade + 30, 200);
-  ellipse(r.x - r.r * 0.2, r.y - r.r * 0.25, r.r * 0.7, r.r * 0.4);
-}
-
-// Topographic feature — nested irregular contour rings, the way a high
-// spot looks on an overhead topo map. Outer rings are meadow green, mid
-// rings are brown/grey rock, inner rings are snow/white. Thin contour
-// lines drawn over every other band complete the map look.
-function drawTopoFeature(g, p) {
-  const numRings = Math.max(4, Math.floor(p.r / 14));
-  // Pre-compute an irregular outline per ring so the closed shapes nest
-  // naturally without intersecting weirdly.
-  const STEPS = 36;
-  for (let i = 0; i < numRings; i++) {
-    const t = (i + 0.5) / numRings;          // 0 = outer (low), 1 = inner (high)
-    const rr = p.r * (1 - t * 0.93);
-    let r, gg, b, a;
-    if (t < 0.30) {
-      // outer: alpine meadow green
-      const k = t / 0.30;
-      r = 95  + k * 18;  gg = 120 + k * 8;  b = 75 + k * 18; a = 140;
-    } else if (t < 0.65) {
-      // mid: rock / earth band
-      const k = (t - 0.30) / 0.35;
-      r = 130 + k * 35; gg = 125 + k * 28; b = 100 + k * 28; a = 165;
-    } else if (t < 0.88) {
-      // upper rock: light grey
-      const k = (t - 0.65) / 0.23;
-      r = 175 + k * 50; gg = 178 + k * 50; b = 175 + k * 55; a = 185;
-    } else {
-      // inner: snow
-      r = 240; gg = 245; b = 250; a = 220;
-    }
-    g.fill(r, gg, b, a);
-    g.beginShape();
-    for (let s = 0; s <= STEPS; s++) {
-      const a2 = (s / STEPS) * TWO_PI;
-      const n  = noise(p.wobbleSeed + i * 0.7 + Math.cos(a2) * 1.4, Math.sin(a2) * 1.4);
-      const rad = rr * (0.86 + n * 0.30);
-      g.vertex(p.x + Math.cos(a2) * rad, p.y + Math.sin(a2) * rad);
-    }
-    g.endShape(g.CLOSE);
-  }
-  // Thin contour lines on every other ring — the unmistakable topo-map
-  // look. Slightly darker than the band color.
-  g.noFill();
-  g.stroke(55, 60, 50, 130);
-  g.strokeWeight(0.9);
-  for (let i = 0; i < numRings; i += 2) {
-    const t = (i + 0.5) / numRings;
-    const rr = p.r * (1 - t * 0.93);
-    g.beginShape();
-    for (let s = 0; s <= STEPS; s++) {
-      const a2 = (s / STEPS) * TWO_PI;
-      const n  = noise(p.wobbleSeed + i * 0.7 + Math.cos(a2) * 1.4, Math.sin(a2) * 1.4);
-      const rad = rr * (0.86 + n * 0.30);
-      g.vertex(p.x + Math.cos(a2) * rad, p.y + Math.sin(a2) * rad);
-    }
-    g.endShape(g.CLOSE);
-  }
-  g.noStroke();
-}
-
-// Snag — sunken stump with a chewed-off stub poking above the surface.
-// Cover for predators; visually breaks up open water and lets the player
-// read the lake bottom.
-function drawSnag(s) {
-  noStroke();
-  // Submerged base — dark blotch on the bottom that hints at structure
-  fill(28, 22, 18, 95);
-  ellipse(s.x, s.y, s.r * 2.6, s.r * 1.6);
-  fill(45, 35, 25, 120);
-  ellipse(s.x, s.y, s.r * 1.8, s.r * 1.1);
-
-  // Stub poking above the surface
-  push();
-  translate(s.x, s.y - 1);
-  rotate(s.stubLean);
-  // wet ring around the base
-  fill(220, 230, 235, 50);
-  ellipse(0, 0, s.r * 1.5, s.r * 0.7);
-  // stub body
-  fill(60, 42, 28);
-  rect(-s.r * 0.32, -s.stubH, s.r * 0.64, s.stubH, 2);
-  // bark highlight
-  fill(85, 58, 38);
-  rect(-s.r * 0.32, -s.stubH, s.r * 0.18, s.stubH, 2);
-  // cracked top
-  fill(140, 110, 75);
-  ellipse(0, -s.stubH, s.r * 0.62, s.r * 0.22);
-  fill(50, 35, 22);
-  ellipse(0, -s.stubH + 1, s.r * 0.45, s.r * 0.14);
-  // optional broken side branches
-  for (let i = 0; i < s.branches; i++) {
-    let a = (noise(s.seed + i) - 0.5) * 1.8;
-    push();
-    translate(0, -s.stubH * (0.4 + i * 0.2));
-    rotate(a);
-    fill(60, 42, 28);
-    rect(0, -1, s.r * 0.6, 2);
-    pop();
-  }
-  pop();
 }
 
 // ============================================================================
@@ -5754,27 +5137,57 @@ function wireDerbyUI() {
 // Render every other player's kayak. Positions arrive at ~10 Hz; we
 // interpolate between the last two received snapshots so motion looks
 // smooth at 60 fps even though the wire only ticks 10× per second.
+// Where a ghost is right now: lerp from its previous sample to its latest
+// over the gap between them, extrapolating up to half a tick past the
+// newest one so movement keeps flowing between network updates.
+function ghostPose(g, now) {
+  const span = Math.max(50, g.recvT - g.prevRecvT);
+  const t = constrain((now - g.prevRecvT) / span, 0, 1.5);
+  return {
+    t,
+    x: lerp(g.prevX, g.x, t),
+    y: lerp(g.prevY, g.y, t),
+    h: lerpAngle(g.prevH, g.h, t),
+  };
+}
+
 function drawDerbyGhosts() {
   if (!window.MP || !MP.ghosts || MP.ghosts.size === 0) return;
   const now = performance.now();
   for (const g of MP.ghosts.values()) {
-    const span = Math.max(50, g.recvT - g.prevRecvT);
-    // Lerp from prev->current over the gap, and let it extrapolate up to
-    // half a tick past the latest sample so movement keeps flowing.
-    const t  = constrain((now - g.prevRecvT) / span, 0, 1.5);
-    const x  = lerp(g.prevX, g.x, t);
-    const y  = lerp(g.prevY, g.y, t);
-    const h  = lerpAngle(g.prevH, g.h, t);
-    drawGhostKayak(x, y, h, g.pp, g.name, g.appearance);
+    const p = ghostPose(g, now);
+    drawGhostKayak(p.x, p.y, p.h, g.pp, g.appearance, !!g.cs);
     // Cast line + fly — only drawn when this ghost is actively casting.
     if (g.cs) {
-      const fx = lerp(g.prevCx, g.cx, t);
-      const fy = lerp(g.prevCy, g.cy, t);
+      const fx = lerp(g.prevCx, g.cx, p.t);
+      const fy = lerp(g.prevCy, g.cy, p.t);
       // Rod tip mirrors the local _rodTip() math: kayak pos + ahead by 0.9·size
-      const rx = x + Math.cos(h) * 22 * 0.9;
-      const ry = y + Math.sin(h) * 22 * 0.9;
+      const rx = p.x + Math.cos(p.h) * 22 * 0.9;
+      const ry = p.y + Math.sin(p.h) * 22 * 0.9;
       drawGhostCast(rx, ry, fx, fy, g.cs);
     }
+  }
+}
+
+// Name tags, drawn in a later pass so nothing in the world covers them.
+function drawGhostLabels() {
+  if (!window.MP || !MP.ghosts || MP.ghosts.size === 0) return;
+  const now = performance.now(), ctx = drawingContext;
+  for (const g of MP.ghosts.values()) {
+    const p = ghostPose(g, now), name = g.name || 'Angler';
+    ctx.save();
+    ctx.translate(p.x, p.y - 38);
+    ctx.scale(1 / zoom, 1 / zoom);        // constant size on screen
+    ctx.font = '600 11px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = Math.max(44, ctx.measureText(name).width + 18), h = 18;
+    ctx.fillStyle = 'rgba(10,22,18,0.72)';
+    Art.roundRect(ctx, -w / 2, -h / 2, w, h, h / 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,130,0.35)'; ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(232,244,226,0.97)';
+    ctx.fillText(name, 0, 0.5);
+    ctx.restore();
   }
 }
 
@@ -5796,7 +5209,8 @@ function drawGhostCast(rx, ry, fx, fy, state) {
   // line direction (gives a nice loaded-loop look for aerial casts).
   let curve = 0;
   let lineAlpha = 180;
-  let lineColor = [240, 240, 230];
+  // Same level-specific line color as your own cast, so it shows on this water.
+  let lineColor = lvl().palette.flyLine || [240, 240, 230];
   if (state === 'a') {
     // Aerial — animated wobble so the line looks alive, not pasted on
     curve = -8 - Math.sin(frameCount * 0.4) * 6;
@@ -5846,64 +5260,17 @@ function lerpAngle(a, b, t) {
   return a + d * t;
 }
 
-// Translucent kayak silhouette using the ghost's chosen color palette so
-// each peer reads as a distinct angler.
-function drawGhostKayak(x, y, heading, paddlePhase, name, appearance) {
-  const ap = appearance || { hull: 'navy', pfd: 'cyan', hat: 'green' };
-  const hp  = HULL_PALETTES[ap.hull] || HULL_PALETTES.navy;
-  const pp  = PFD_PALETTES [ap.pfd]  || PFD_PALETTES.cyan;
-  const hat = HAT_PALETTES [ap.hat]  || HAT_PALETTES.green;
-
-  push();
-  translate(x, y);
-  rotate(heading);
-  const s = 22;
-  noStroke();
-  // hull shadow
-  fill(0, 0, 0, 70);
-  ellipse(2, 4, s * 2.7, s * 0.95);
-  // hull (translucent so they read as "remote")
-  fill(hp.dark[0], hp.dark[1], hp.dark[2], 210);
-  ellipse(0, 0, s * 2.5, s * 0.8);
-  fill(hp.light[0], hp.light[1], hp.light[2], 210);
-  ellipse(0, -s * 0.02, s * 2.2, s * 0.55);
-  // cockpit
-  fill(15, 20, 28, 210);
-  ellipse(s * 0.05, 0, s * 0.85, s * 0.42);
-  // PFD
-  fill(pp.base[0], pp.base[1], pp.base[2], 230);
-  ellipse(s * 0.05, 0, s * 0.55, s * 0.4);
-  // head + cap
-  fill(225, 195, 155, 230);
-  ellipse(s * 0.05, 0, s * 0.28, s * 0.28);
-  fill(hat[0], hat[1], hat[2], 230);
-  arc(s * 0.05, 0, s * 0.30, s * 0.30, PI, TWO_PI);
-  // tiny paddle motion — animate from received paddlePhase
-  stroke(50, 35, 22, 200);
-  strokeWeight(2);
-  const px = s * 0.05;
-  const py = Math.sin(paddlePhase || 0) * s * 0.7;
-  line(px, -s * 0.85, px, s * 0.85);
-  noStroke();
-  // blade hint on the active side
-  fill(60, 45, 30, 220);
-  ellipse(px, py, s * 0.3, s * 0.5);
-  pop();
-
-  // Name label above the kayak, counter-scaled so zoom doesn't shrink text.
-  push();
-  translate(x, y - 38);
-  if (typeof zoom === 'number' && zoom > 0) scale(1 / zoom);
-  noStroke();
-  fill(0, 0, 0, 150);
-  rectMode(CENTER);
-  rect(0, 0, Math.max(50, (name || '').length * 6.5 + 14), 16, 4);
-  rectMode(CORNER);
-  fill(220, 240, 220, 245);
-  textAlign(CENTER, CENTER);
-  textSize(11);
-  text(name || 'Angler', 0, 0);
-  pop();
+// Another angler's kayak, in their own colors and slightly sheer so it
+// reads as someone else's boat rather than yours.
+function drawGhostKayak(x, y, heading, paddlePhase, appearance, casting) {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(heading);
+  Art.kayak(ctx, 22, appearance || { hull: 'navy', pfd: 'cyan', hat: 'green' }, {
+    heading, paddlePhase: paddlePhase || 0, casting, alpha: 0.88,
+  });
+  ctx.restore();
 }
 
 function enterDerbyWorld(d) {
@@ -6428,50 +5795,32 @@ function setAcctStatus(el, msg, cls) {
 function drawProfilePreview() {
   const canvas = document.getElementById('profile-preview');
   if (!canvas) return;
+  // Match the backing store to the element's real size so the preview is
+  // sharp on retina screens and never stretched on phones.
+  const cssW = canvas.clientWidth || 200, cssH = canvas.clientHeight || 120;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+  }
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
 
-  const hp  = HULL_PALETTES[playerAppearance.hull] || HULL_PALETTES.navy;
-  const pp  = PFD_PALETTES [playerAppearance.pfd]  || PFD_PALETTES.orange;
-  const hat = HAT_PALETTES [playerAppearance.hat]  || HAT_PALETTES.green;
-
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
-  const s  = 38;
-
+  // A few rings on the water so the boat sits in something.
+  ctx.strokeStyle = 'rgba(220,240,235,0.16)';
+  ctx.lineWidth = 1;
+  for (const r of [46, 64, 84]) {
+    ctx.beginPath();
+    ctx.ellipse(cssW / 2 - 6, cssH / 2 + 3, r * 1.25, r * 0.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // The same painter the game uses, angled slightly and mid-stroke.
+  const heading = -0.16;
   ctx.save();
-  ctx.translate(cx, cy);
-  // Hull shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath(); ctx.ellipse(2, 6, s * 1.35, s * 0.48, 0, 0, Math.PI * 2); ctx.fill();
-  // Hull
-  ctx.fillStyle = `rgb(${hp.base.join(',')})`;
-  ctx.beginPath(); ctx.ellipse(0, 0, s * 1.25, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-  // Accent
-  ctx.fillStyle = `rgb(${hp.accent.join(',')})`;
-  ctx.beginPath(); ctx.ellipse(0, -s * 0.18, s * 1.15, s * 0.08, 0, 0, Math.PI * 2); ctx.fill();
-  // Lip
-  ctx.fillStyle = `rgb(${hp.dark.join(',')})`;
-  ctx.beginPath(); ctx.ellipse(0, 0, s * 1.25, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = `rgb(${hp.light.join(',')})`;
-  ctx.beginPath(); ctx.ellipse(0, -s * 0.02, s * 1.1, s * 0.27, 0, 0, Math.PI * 2); ctx.fill();
-  // Cockpit
-  ctx.fillStyle = 'rgb(15, 20, 28)';
-  ctx.beginPath(); ctx.ellipse(s * 0.05, 0, s * 0.42, s * 0.21, 0, 0, Math.PI * 2); ctx.fill();
-  // PFD
-  ctx.fillStyle = `rgb(${pp.base.join(',')})`;
-  ctx.beginPath(); ctx.ellipse(s * 0.05, 0, s * 0.27, s * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = `rgb(${pp.dark.join(',')})`;
-  ctx.beginPath(); ctx.arc(s * 0.05, 0, s * 0.20, -Math.PI / 2, Math.PI / 2); ctx.fill();
-  // Head + hat
-  ctx.fillStyle = 'rgb(225, 195, 155)';
-  ctx.beginPath(); ctx.ellipse(s * 0.05, 0, s * 0.14, s * 0.14, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = `rgb(${hat.join(',')})`;
-  ctx.beginPath(); ctx.arc(s * 0.05, 0, s * 0.15, Math.PI, Math.PI * 2); ctx.fill();
-  // Paddle hint
-  ctx.strokeStyle = 'rgba(50, 35, 22, 0.8)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(s * 0.05, -s * 0.6); ctx.lineTo(s * 0.05, s * 0.6); ctx.stroke();
+  ctx.translate(cssW / 2, cssH / 2);
+  ctx.rotate(heading);
+  Art.kayak(ctx, Math.min(44, cssH * 0.35), playerAppearance, { heading, paddlePhase: 0.9 });
   ctx.restore();
 }
 
