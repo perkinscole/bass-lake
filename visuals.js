@@ -569,6 +569,25 @@ const Art = (() => {
     // Each lily "pad" the simulation placed becomes a small raft of pads.
     // Real pads are about a foot across; these are 9-16 units (2-3 ft), in
     // scale with the fish and nothing like the old boat-sized discs.
+    //
+    // A pad floats on open water, so every one is checked against the bank,
+    // logs, rocks and snags. One that would overlap is tried in a few other
+    // spots in the raft and dropped if none is clear.
+    const padFits = (x, y, r) => {
+      if (lake.insideAmount(x, y) < r + 3) return false;                 // on or touching the bank
+      for (const l of logs) {
+        const dx = x - l.x, dy = y - l.y;
+        if (Math.abs(dx) > l.len && Math.abs(dy) > l.len) continue;
+        const c = Math.cos(l.a), sn = Math.sin(l.a);
+        const along = dx * c + dy * sn, across = -dx * sn + dy * c;
+        const over = Math.max(0, Math.abs(along) - l.len / 2);
+        // The margin covers the trunk plus its broken branch stubs.
+        if (Math.hypot(over, across) < l.thick * 1.3 + r + 2) return false;
+      }
+      for (const k of rocks) if (Math.hypot(x - k.x, y - k.y) < k.r * 1.1 + r + 1.5) return false;
+      for (const k of snags) if (Math.hypot(x - k.x, y - k.y) < k.r * 1.8 + r + 1.5) return false;
+      return true;
+    };
     for (const lp of lilypads) {
       const h = hash2(lp.x, lp.y);
       const bloom = h > 0.86 ? (h > 0.93 ? 4 : 3) : 0;
@@ -576,13 +595,16 @@ const Art = (() => {
       lp.pads = [];
       for (let k = 0; k < count; k++) {
         const hk = hash2(lp.x + k * 17.3, lp.y - k * 9.1), hk2 = hash2(lp.y + k * 5.7, lp.x + k * 3.3);
-        const ang = lp.a + k * 2.4, d = lp.r * 0.78 * Math.sqrt((k + 0.4) / count);
         const kind = (k === 0 && bloom) ? bloom : (hk2 < 0.5 ? 0 : hk2 < 0.84 ? 1 : 2);
-        lp.pads.push({
-          dx: Math.cos(ang) * d, dy: Math.sin(ang) * d,
-          r: kind >= 3 ? 7.5 : 4.5 + hk * 3.5,
-          a: ang * 1.7 + hk * 6, kind, ph: hk * 20,
-        });
+        const r = kind >= 3 ? 7.5 : 4.5 + hk * 3.5;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const ang = lp.a + k * 2.4 + attempt * 1.1;
+          const d = lp.r * 0.78 * Math.sqrt((k + 0.4) / count) * (1 - attempt * 0.12);
+          const dx = Math.cos(ang) * d, dy = Math.sin(ang) * d;
+          if (!padFits(lp.x + dx, lp.y + dy, r)) continue;
+          lp.pads.push({ dx, dy, r, a: ang * 1.7 + hk * 6, kind, ph: hk * 20 });
+          break;
+        }
       }
     }
     S.clouds = [];
@@ -1082,45 +1104,65 @@ const Art = (() => {
     ctx.restore();
   }
 
-  // A fish seen through the surface: a dark fish-shaped shadow with a soft
-  // halo and a working tail. Expects the context already translated to the
-  // fish and rotated to its heading. L = length, hw = half-width.
-  function fishShadow(ctx, L, hw, tailAng, alpha, glint) {
-    const body = () => {
+  // A fish seen through the surface: a dark shadow that swims. The body
+  // is built on a spine carrying a wave from head to tail — barely moving
+  // at the head, widest at the tail — so the whole fish flexes as it goes
+  // rather than a stiff shape wagging a fin.
+  // Expects the context translated to the fish and rotated to its heading.
+  //   L, hw   length and half-width
+  //   phase   swim cycle (advances faster the faster the fish is moving)
+  //   amp     how far the tail swings, as a fraction of L
+  function fishShadow(ctx, L, hw, phase, amp, alpha, glint) {
+    const N = 12, sx = [], sy = [], lx = [], ly = [], rx = [], ry = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      sx.push(L * (0.5 - t));
+      sy.push(amp * L * (0.1 + 0.9 * Math.pow(t, 1.7)) * Math.sin(phase - t * 2.6));
+    }
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, a = Math.max(0, i - 1), b = Math.min(N, i + 1);
+      const tx = sx[b] - sx[a], ty = sy[b] - sy[a], m = Math.hypot(tx, ty) || 1;
+      const nx = -ty / m, ny = tx / m;
+      let w;
+      if (t < 0.8) {                       // body: fullest a third of the way back
+        const u = t / 0.8;
+        w = hw * Math.max(Math.sin(Math.PI * Math.pow(u, 0.6)), u > 0.5 ? 0.17 : 0);
+      } else {                             // tail fin flaring out from the wrist
+        w = hw * (0.17 + 0.78 * (t - 0.8) / 0.2);
+      }
+      lx.push(sx[i] + nx * w); ly.push(sy[i] + ny * w);
+      rx.push(sx[i] - nx * w); ry.push(sy[i] - ny * w);
+    }
+    const outline = () => {
       ctx.beginPath();
-      ctx.moveTo(L * 0.5, 0);
-      ctx.bezierCurveTo(L * 0.4, -hw * 1.1, -L * 0.05, -hw * 1.25, -L * 0.38, -hw * 0.16);
-      ctx.lineTo(-L * 0.38, hw * 0.16);
-      ctx.bezierCurveTo(-L * 0.05, hw * 1.25, L * 0.4, hw * 1.1, L * 0.5, 0);
+      ctx.moveTo(lx[0], ly[0]);
+      for (let i = 1; i <= N; i++) ctx.lineTo(lx[i], ly[i]);
+      ctx.lineTo(sx[N - 1], sy[N - 1]);    // the fork in the tail
+      for (let i = N; i >= 0; i--) ctx.lineTo(rx[i], ry[i]);
       ctx.closePath();
     };
-    ctx.fillStyle = `rgba(2,12,18,${alpha * 0.38})`;
-    ctx.save(); ctx.scale(1.15, 1.32); body(); ctx.fill(); ctx.restore();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(2,12,18,${alpha * 0.3})`;      // soft halo of deeper water
+    ctx.lineWidth = Math.max(1.2, hw * 0.7);
+    outline(); ctx.stroke();
+    const fi = Math.round(N * 0.28);                        // pectoral fins, riding the spine
     ctx.fillStyle = `rgba(2,10,16,${alpha * 0.55})`;
-    for (const sd of [-1, 1]) {                    // pectoral fins
+    for (const sd of [-1, 1]) {
       ctx.save();
-      ctx.translate(L * 0.14, sd * hw * 0.8);
-      ctx.rotate(sd * 0.9);
+      ctx.translate(sx[fi], sy[fi] + sd * hw * 0.8);
+      ctx.rotate(sd * (0.9 + Math.sin(phase * 0.5) * 0.15));
       ctx.beginPath(); ctx.ellipse(-L * 0.06, 0, L * 0.1, hw * 0.24, 0, 0, TAU); ctx.fill();
       ctx.restore();
     }
     ctx.fillStyle = `rgba(2,10,16,${alpha})`;
-    body(); ctx.fill();
-    ctx.save();
-    ctx.translate(-L * 0.36, 0);
-    ctx.rotate(tailAng);
-    ctx.beginPath();
-    ctx.moveTo(L * 0.04, -hw * 0.16);
-    ctx.lineTo(-L * 0.24, -hw * 0.82);
-    ctx.quadraticCurveTo(-L * 0.15, 0, -L * 0.24, hw * 0.82);
-    ctx.lineTo(L * 0.04, hw * 0.16);
-    ctx.closePath(); ctx.fill();
-    ctx.restore();
-    if (glint > 0.05) {                            // light catching the back near the surface
+    outline(); ctx.fill();
+    if (glint > 0.05) {                                     // light along the back near the surface
       ctx.strokeStyle = `rgba(190,226,216,${glint * 0.2})`;
       ctx.lineWidth = Math.max(0.6, hw * 0.14);
-      ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(L * 0.3, 0); ctx.lineTo(-L * 0.26, 0); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx[2], sy[2]);
+      for (let i = 3; i <= N - 3; i++) ctx.lineTo(sx[i], sy[i]);
+      ctx.stroke();
     }
   }
 
@@ -1143,12 +1185,26 @@ const Art = (() => {
     ctx.restore();
   }
 
+  // Fly rod geometry in the kayak's own frame (+x = bow).
+  //   ax, ay  unit direction the rod points
+  //   k       its length on the water, in units of s. A rod is about 1.9 s
+  //           long, but from above you only see how far it leans: short
+  //           when held high, longer as it drops, negative when it is
+  //           swung back over the shoulder.
+  //   stroke  -1..1, how far the casting hand is pushed along that line
+  function rodPose(s, ax, ay, k, stroke) {
+    const reach = (0.25 + 0.2 * stroke) * s;       // the hand travels about a foot and a half
+    const hx = -0.02 * s + ax * reach, hy = 0.2 * s + ay * reach;   // from the casting shoulder
+    return { hx, hy, tx: hx + ax * k * s, ty: hy + ay * k * s };
+  }
+
   // The kayak and its paddler, from above. One painter for the player, the
   // other anglers in a derby, and the profile preview. Expects the context
   // translated to the kayak and rotated to its heading (+x = bow).
   //   o.heading     world heading, so light and shadow stay put as it turns
   //   o.paddlePhase paddle stroke phase
   //   o.casting     rod in hand, paddle resting across the lap
+  //   o.rod         { ax, ay, k, stroke, bend } — where the rod points (see rodPose)
   //   o.alpha       overall opacity (other players are drawn slightly sheer)
   function kayak(ctx, s, ap, o = {}) {
     const hp = HULL_PALETTES[ap && ap.hull] || HULL_PALETTES.navy;
@@ -1213,7 +1269,7 @@ const Art = (() => {
     const tilt = o.casting ? 0.1 : 0.55 * Math.cos(ph);
     const slide = o.casting ? 0 : sw * 0.14 * s;
     const dx = Math.sin(tilt), dy = Math.cos(tilt);
-    const pvx = (o.casting ? 0.3 : 0.2) * s, half = 0.92 * s;
+    const pvx = (o.casting ? 0.36 : 0.2) * s, half = 0.92 * s;
     const ends = [[pvx + dx * half, slide + dy * half, 1], [pvx - dx * half, slide - dy * half, -1]];
     const hands = [[pvx + dx * 0.3 * s, slide + dy * 0.3 * s], [pvx - dx * 0.3 * s, slide - dy * 0.3 * s]];
 
@@ -1222,7 +1278,16 @@ const Art = (() => {
     ctx.strokeStyle = rgb(shade(pp.dark, 0.7), 0.8); ctx.lineWidth = s * 0.03;
     seg(-0.1 * s, -0.1 * s, 0.08 * s, -0.1 * s); seg(-0.1 * s, 0.1 * s, 0.08 * s, 0.1 * s);
 
-    if (o.casting) hands[0] = [0.3 * s, 0.11 * s];  // one hand comes off the paddle for the rod
+    // With a cast out, both hands leave the paddle: one drives the rod
+    // through the casting stroke, the other tends line at the lap.
+    let rod = null, lookX = 1, lookY = 0;
+    if (o.casting) {
+      const rd = o.rod || { ax: 1, ay: 0, k: 0.8, stroke: 0, bend: 0 };
+      rod = Object.assign({}, rd, rodPose(s, rd.ax, rd.ay, rd.k, rd.stroke || 0));
+      hands[0] = [rod.hx, rod.hy];
+      hands[1] = [0.17 * s, -0.07 * s];
+      lookX = rd.ax; lookY = rd.ay;                // the angler watches the cast
+    }
     ctx.strokeStyle = rgb(shade(pp.dark, 0.82)); ctx.lineWidth = s * 0.1;                          // arms
     seg(-0.02 * s, 0.2 * s, hands[0][0], hands[0][1]);
     seg(-0.02 * s, -0.2 * s, hands[1][0], hands[1][1]);
@@ -1254,17 +1319,33 @@ const Art = (() => {
     ctx.fillStyle = 'rgb(226,196,156)';                                                             // hands
     for (const [hx, hy] of hands) { ell(hx, hy, 0.05 * s, 0.05 * s); ctx.fill(); }
 
-    if (o.casting) {                               // fly rod, grip to tip
-      ctx.strokeStyle = 'rgb(178,140,92)'; ctx.lineWidth = s * 0.06;
-      seg(0.2 * s, 0.12 * s, 0.34 * s, 0.1 * s);
-      ctx.fillStyle = 'rgb(160,160,166)'; ell(0.22 * s, 0.14 * s, 0.045 * s, 0.045 * s); ctx.fill();
-      ctx.strokeStyle = 'rgb(30,30,32)'; ctx.lineWidth = s * 0.04;
-      seg(0.34 * s, 0.1 * s, 0.62 * s, 0.05 * s);
-      ctx.lineWidth = s * 0.022;
-      seg(0.62 * s, 0.05 * s, 0.9 * s, 0);
+    if (rod) {
+      const { hx, hy, tx, ty, ax, ay } = rod, sg = rod.k < 0 ? -1 : 1;
+      // A loaded rod bows sideways a touch; the curve runs through this point.
+      const cx = (hx + tx) / 2 - ay * (rod.bend || 0) * s, cy = (hy + ty) / 2 + ax * (rod.bend || 0) * s;
+      const blank = (t0, t1) => {
+        const at = (t) => [(1 - t) * (1 - t) * hx + 2 * t * (1 - t) * cx + t * t * tx,
+                           (1 - t) * (1 - t) * hy + 2 * t * (1 - t) * cy + t * t * ty];
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) {
+          const [x, y] = at(t0 + (t1 - t0) * i / 6);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+      ctx.strokeStyle = 'rgba(0,10,12,0.4)'; ctx.lineWidth = s * 0.09; blank(0, 1);     // contrast on any water
+      ctx.strokeStyle = 'rgb(206,162,82)'; ctx.lineWidth = s * 0.065; blank(0, 0.45);   // butt section
+      ctx.strokeStyle = 'rgb(226,190,116)'; ctx.lineWidth = s * 0.038; blank(0.45, 1);  // fine tip
+      ctx.strokeStyle = 'rgb(150,108,62)'; ctx.lineWidth = s * 0.075;                   // cork grip
+      seg(hx - ax * sg * 0.08 * s, hy - ay * sg * 0.08 * s, hx + ax * sg * 0.07 * s, hy + ay * sg * 0.07 * s);
+      ctx.fillStyle = 'rgb(170,172,178)';                                               // reel
+      ell(hx - ax * sg * 0.06 * s - ay * 0.055 * s, hy - ay * sg * 0.06 * s + ax * 0.055 * s, 0.05 * s, 0.05 * s);
+      ctx.fill();
     }
 
-    ell(0.13 * s, 0, 0.12 * s, 0.15 * s); ctx.fillStyle = rgb(shade(hat, 0.76)); ctx.fill();        // hat brim
+    // Head and hat. The brim points wherever the angler is looking.
+    ell(0.03 * s + lookX * 0.1 * s, lookY * 0.1 * s, 0.12 * s, 0.15 * s, Math.atan2(lookY, lookX));
+    ctx.fillStyle = rgb(shade(hat, 0.76)); ctx.fill();
     ell(0.03 * s, 0, 0.13 * s, 0.13 * s); ctx.fillStyle = 'rgb(226,196,156)'; ctx.fill();           // head
     ell(0.02 * s, 0, 0.15 * s, 0.15 * s); ctx.fillStyle = rgb(hat); ctx.fill();                     // crown
     ell(0.02 * s + lx * 0.05 * s, ly * 0.05 * s, 0.075 * s, 0.075 * s);
@@ -1292,6 +1373,6 @@ const Art = (() => {
     prepareWorld, bakeStatic,
     drawCloudShadows, drawWaterFx, drawShoreFoam, drawCanopies,
     drawLily, drawRock, drawLog, drawSnag, drawCattail, drawWeed,
-    fishShadow, kayak, kayakWake, drawScreenFx, roundRect,
+    fishShadow, kayak, kayakWake, rodPose, drawScreenFx, roundRect,
   };
 })();

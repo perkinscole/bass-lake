@@ -3372,8 +3372,11 @@ class Panfish {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
     ctx.rotate(this.vel.heading());
+    // The swim wave runs off this.wiggle, which already advances faster the
+    // faster the fish moves; the tail also swings wider at speed.
+    const effort = Math.min(1, this.vel.mag() / (this.maxSpeed || 1));
     Art.fishShadow(ctx, L, L * 0.24 * this.cfg.bodyAspect / 0.62,
-      sin(this.wiggle) * 0.4, 0.52 * vis, vis);
+      this.wiggle, 0.06 + 0.08 * effort, 0.52 * vis, vis);
     ctx.restore();
   }
 }
@@ -3564,8 +3567,9 @@ class Bass {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
     ctx.rotate(this.vel.mag() > 0.01 ? this.vel.heading() : 0);
+    // A lurking predator barely sculls; on a strike the whole body whips.
     Art.fishShadow(ctx, L, L * aspect * 0.45,
-      sin(this.wiggle) * (this.dashing ? 0.35 : 0.18), 0.62 * vis, vis);
+      this.wiggle, this.dashing ? 0.14 : 0.045 + 0.04 * Math.min(1, this.vel.mag() / 1.5), 0.62 * vis, vis);
     ctx.restore();
   }
 }
@@ -3685,9 +3689,10 @@ class Kayak {
     // Hull, paddler and paddle come from the shared painter, in the
     // player's chosen colors. With a cast out, the paddle rests across the
     // lap and the rod comes up.
+    const casting = !!cast && cast.state !== 'done';
     Art.kayak(ctx, s, playerAppearance, {
       heading: this.heading, paddlePhase: this.paddlePhase, speed,
-      casting: !!cast && cast.state !== 'done',
+      casting, rod: casting ? cast.rodPose() : null,
     });
     ctx.restore();
   }
@@ -4146,6 +4151,26 @@ class Eagle {
   }
 }
 
+// Where a rod points, for drawing a kayak at (px, py) facing `heading`.
+// (dx, dy) is the unit direction in world space; k and stroke are described
+// at Art.rodPose. Returns the pose for Art.kayak plus the rod tip in world
+// space, which is where the fly line starts.
+function rodPoseFor(px, py, heading, dx, dy, k, stroke, bend) {
+  const s = 22, c = Math.cos(heading), sn = Math.sin(heading);
+  const ax = dx * c + dy * sn, ay = -dx * sn + dy * c;        // into the kayak's frame
+  const p = Art.rodPose(s, ax, ay, k, stroke);
+  return {
+    ax, ay, k, stroke, bend: bend || 0,
+    tipX: px + p.tx * c - p.ty * sn,
+    tipY: py + p.tx * sn + p.ty * c,
+  };
+}
+// The casting shoulder in world space — rods aim from here.
+function castShoulder(px, py, heading) {
+  const s = 22, c = Math.cos(heading), sn = Math.sin(heading);
+  return { x: px - 0.02 * s * c - 0.2 * s * sn, y: py - 0.02 * s * sn + 0.2 * s * c };
+}
+
 // ---------- FLY CAST ----------
 // Fly fishing: hold the mouse to begin false-casting. The fly line whips
 // back and forth above the water, growing further with each cycle.
@@ -4197,6 +4222,58 @@ class FlyCast {
       x: player.pos.x + Math.cos(player.heading) * player.size * 0.9,
       y: player.pos.y + Math.sin(player.heading) * player.size * 0.9,
     };
+  }
+
+  // Where the rod is pointing this frame. Drawing only: bites, the line
+  // tether and reeling in still measure from _rodTip().
+  //   false cast  — swings forward and back along the aim line, a beat
+  //                 ahead of the fly line it is throwing
+  //   delivery    — follows through toward the target and drops
+  //   fishing     — points down the line at the fly
+  //   fish on     — held high and loaded, tip shaking with the tension
+  rodPose() {
+    if (this._poseFrame === frameCount && this._pose) return this._pose;
+    const px = player.pos.x, py = player.pos.y, h = player.heading, s = player.size;
+    const sh = castShoulder(px, py, h);
+    let dx, dy, k, stroke = 0.3, bend = 0;
+    if (this.state === 'aerial') {
+      const aim = this._aimDir();
+      const swing = Math.sin(this.aerialPhase + 0.55);
+      dx = aim.x; dy = aim.y;
+      k = 0.15 + 0.75 * swing;
+      stroke = swing;
+    } else {
+      const toTarget = this.state === 'delivering';
+      dx = (toTarget ? this.targetX : this.flyX) - sh.x;
+      dy = (toTarget ? this.targetY : this.flyY) - sh.y;
+      const d = Math.hypot(dx, dy) || 1;
+      dx /= d; dy /= d;
+      const reach = d / s;                 // a close fly means a lifted rod
+      if (toTarget) {
+        const t = constrain(this.flightT / (this.flightDuration || 1), 0, 1);
+        k = Math.min(lerp(0.9, 1.5, t), reach * 0.6);
+        stroke = 1 - t * 0.6;
+      } else if (this.state === 'hooked') {
+        const load = Math.min(1, this.tension);
+        k = Math.min(1.1, reach * 0.5);
+        bend = 0.05 * load + Math.sin(frameCount * 0.5) * 0.035 * load;
+        stroke = this.reeling ? -0.35 : 0.15;
+      } else {
+        k = Math.min(1.5, reach * 0.6);
+      }
+    }
+    // Ease between poses so the rod never snaps from one state to the next.
+    const prev = this._poseRaw;
+    if (prev) {
+      const e = 0.4;
+      dx = lerp(prev.dx, dx, e); dy = lerp(prev.dy, dy, e);
+      const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
+      k = lerp(prev.k, k, e); stroke = lerp(prev.stroke, stroke, e);
+    }
+    this._poseRaw = { dx, dy, k, stroke };
+    this._pose = rodPoseFor(px, py, h, dx, dy, k, stroke, bend);
+    this._poseFrame = frameCount;
+    return this._pose;
   }
 
   _aimDir() {
@@ -4641,8 +4718,19 @@ class FlyCast {
   // separately by drawHud(), above the tree canopies.
   draw() {
     if (this.state === 'done') return;
-    const r = this._rodTip(), ctx = drawingContext, pal = lvl().palette;
-    const dx = this.flyX - r.x, dy = this.flyY - r.y;
+    const ctx = drawingContext, pal = lvl().palette;
+    // The line leaves the visible rod tip. The simulation tracks the fly
+    // from a fixed point on the bow, so while the line is in the air the
+    // drawn fly is carried along with the tip; the offset fades out over
+    // the delivery so the fly lands exactly where the simulation has it.
+    const pose = this.rodPose(), anchor = this._rodTip();
+    const r = { x: pose.tipX, y: pose.tipY };
+    let carry = 0;
+    if (this.state === 'aerial') carry = 1;
+    else if (this.state === 'delivering') carry = 1 - constrain(this.flightT / (this.flightDuration || 1), 0, 1);
+    const flyX = this.flyX + (r.x - anchor.x) * carry;
+    const flyY = this.flyY + (r.y - anchor.y) * carry;
+    const dx = flyX - r.x, dy = flyY - r.y;
     const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len, ny = dx / len;
 
@@ -4663,12 +4751,12 @@ class FlyCast {
       bow = Math.sin(frameCount * 0.04 + this.driftSeed) * 3;
       lw = 0.9; alpha = 0.8;
     }
-    const mx = (r.x + this.flyX) / 2 + nx * bow;
-    const my = (r.y + this.flyY) / 2 + ny * bow;
+    const mx = (r.x + flyX) / 2 + nx * bow;
+    const my = (r.y + flyY) / 2 + ny * bow;
     const trace = (ox, oy) => {
       ctx.beginPath();
       ctx.moveTo(r.x + ox * 0.6, r.y + oy * 0.6);
-      ctx.quadraticCurveTo(mx + ox, my + oy, this.flyX + ox, this.flyY + oy);
+      ctx.quadraticCurveTo(mx + ox, my + oy, flyX + ox, flyY + oy);
       ctx.stroke();
     };
 
@@ -4691,7 +4779,7 @@ class FlyCast {
     ctx.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha})`; ctx.lineWidth = lw;
     trace(0, 0);
 
-    const fx = this.flyX, fy = this.flyY, cfg = this.cfg;
+    const fx = flyX, fy = flyY, cfg = this.cfg;
     const fc = `rgb(${cfg.flyColor[0]},${cfg.flyColor[1]},${cfg.flyColor[2]})`;
     const lc = `rgba(${cfg.legsColor[0]},${cfg.legsColor[1]},${cfg.legsColor[2]},0.9)`;
     const dot = (x, y, rad) => { ctx.beginPath(); ctx.arc(x, y, rad, 0, TWO_PI); ctx.fill(); };
@@ -5156,16 +5244,24 @@ function drawDerbyGhosts() {
   const now = performance.now();
   for (const g of MP.ghosts.values()) {
     const p = ghostPose(g, now);
-    drawGhostKayak(p.x, p.y, p.h, g.pp, g.appearance, !!g.cs);
-    // Cast line + fly — only drawn when this ghost is actively casting.
+    // With a cast out, their rod follows their fly — we only receive the
+    // fly's position, and that is enough: it swings behind them on a back
+    // cast and out front on the forward one, and the rod goes with it.
+    let rod = null, fx = 0, fy = 0;
     if (g.cs) {
-      const fx = lerp(g.prevCx, g.cx, p.t);
-      const fy = lerp(g.prevCy, g.cy, p.t);
-      // Rod tip mirrors the local _rodTip() math: kayak pos + ahead by 0.9·size
-      const rx = p.x + Math.cos(p.h) * 22 * 0.9;
-      const ry = p.y + Math.sin(p.h) * 22 * 0.9;
-      drawGhostCast(rx, ry, fx, fy, g.cs);
+      fx = lerp(g.prevCx, g.cx, p.t);
+      fy = lerp(g.prevCy, g.cy, p.t);
+      const sh = castShoulder(p.x, p.y, p.h);
+      const d = Math.hypot(fx - sh.x, fy - sh.y) || 1, reach = d / 22;
+      const fighting = g.cs === 'h' || g.cs === 'r';
+      const k = g.cs === 'a' ? Math.min(0.85, reach * 0.5)
+              : fighting     ? Math.min(1.1, reach * 0.5)
+              :                Math.min(1.5, reach * 0.6);
+      rod = rodPoseFor(p.x, p.y, p.h, (fx - sh.x) / d, (fy - sh.y) / d, k,
+        g.cs === 'a' ? 0.8 : 0.2, fighting ? 0.05 : 0);
     }
+    drawGhostKayak(p.x, p.y, p.h, g.pp, g.appearance, rod);
+    if (rod) drawGhostCast(rod.tipX, rod.tipY, fx, fy, g.cs);
   }
 }
 
@@ -5262,13 +5358,13 @@ function lerpAngle(a, b, t) {
 
 // Another angler's kayak, in their own colors and slightly sheer so it
 // reads as someone else's boat rather than yours.
-function drawGhostKayak(x, y, heading, paddlePhase, appearance, casting) {
+function drawGhostKayak(x, y, heading, paddlePhase, appearance, rod) {
   const ctx = drawingContext;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(heading);
   Art.kayak(ctx, 22, appearance || { hull: 'navy', pfd: 'cyan', hat: 'green' }, {
-    heading, paddlePhase: paddlePhase || 0, casting, alpha: 0.88,
+    heading, paddlePhase: paddlePhase || 0, casting: !!rod, rod, alpha: 0.88,
   });
   ctx.restore();
 }
