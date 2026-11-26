@@ -746,7 +746,8 @@ const Art = (() => {
     }
 
     // ---- beach: drawn only on the land side of the shoreline ----
-    const bw = alpine ? 1 : 0.62;
+    const river = !!lake.course;
+    const bw = alpine ? 1 : river ? 0.9 : 0.62;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, WORLD_W, WORLD_H);
@@ -758,9 +759,9 @@ const Art = (() => {
       traceLake(ctx); ctx.stroke();
     }
     for (const s of lake.sandSpecks) { ctx.fillStyle = rgb(pal.sand, 0.55); circle(ctx, s.x, s.y, s.r / 2); }
-    for (let i = 0; i < 2200; i++) {                // pebbles along the waterline
-      const p = randomShorePoint(random(1, 15));
-      const tone = random(70, 150);
+    for (let i = 0, n = river ? 9000 : 2200; i < n; i++) {   // pebbles along the waterline (gravel bars on a river)
+      const p = randomShorePoint(random(1, river ? 38 : 15));
+      const tone = random(70, river ? 185 : 150);
       ctx.fillStyle = rgb(alpine ? [tone, tone + 4, tone + 12] : [tone, tone * 0.92, tone * 0.78], 0.75);
       circle(ctx, p.x, p.y, random(0.9, 2.4));
     }
@@ -793,13 +794,40 @@ const Art = (() => {
     }
     // Depth: the basins and the channels between them fall away to dark.
     const deep = pal.deep || shade(mix(pal.waterBase, pal.patchAlgae, 0.7), 0.7);
+    const shallow = pal.shallow || mix(pal.patchTeal, pal.sand, 0.38);
     for (const b of lake.basins) softBlob(ctx, b.x, b.y, b.r * 1.15, b.r * 1.15, 0, deep, 0.78, 0.45, 0.7);
-    for (const c of lake.channels) {
-      for (const p of c.path) softBlob(ctx, p.x, p.y, c.w * 0.95, c.w * 0.95, 0, deep, 0.3);
+    if (lake.course) {
+      // A river reads by its bed: pools dark and green, runs in between,
+      // riffles pale and thin enough to count the cobbles.
+      const riffle = pal.riffle || mix(shallow, pal.sand, 0.5);
+      for (const p of lake.course) {
+        const hw = p.w * 0.39;
+        if (p.type === 'pool')        softBlob(ctx, p.x, p.y, hw * 1.05, hw * 1.05, 0, deep, 0.62 * p.depth, 0.5, 0.72);
+        else if (p.type === 'riffle') softBlob(ctx, p.x, p.y, hw * 1.3, hw * 1.3, 0, riffle, 0.42);
+        else                          softBlob(ctx, p.x, p.y, hw * 0.8, hw * 0.8, 0, deep, 0.18);
+      }
+      const stones = [[152, 142, 120], [122, 118, 106], [170, 152, 122], [98, 100, 98], [150, 120, 94], [186, 178, 160]];
+      for (const p of lake.course) {
+        if (p.type === 'pool' || p.type === 'pond') continue;
+        const hw = p.w * 0.39, n = p.type === 'riffle' ? 30 : 8, a = p.type === 'riffle' ? 0.6 : 0.3;
+        for (let k = 0; k < n; k++) {
+          const lat = random(-1.05, 1.05) * hw, along = random(-22, 22);
+          const x = p.x - p.ty * lat + p.tx * along, y = p.y + p.tx * lat + p.ty * along;
+          if (!lake.contains(x, y, 1)) continue;
+          const rr = random(1.6, 4.8), rot = random(TAU);
+          ctx.fillStyle = 'rgba(8,24,24,0.28)';
+          ctx.beginPath(); ctx.ellipse(x + rr * 0.3, y + rr * 0.4, rr, rr * 0.75, rot, 0, TAU); ctx.fill();
+          ctx.fillStyle = rgb(stones[Math.floor(random(stones.length))], a);
+          ctx.beginPath(); ctx.ellipse(x, y, rr, rr * 0.75, rot, 0, TAU); ctx.fill();
+        }
+      }
+    } else {
+      for (const c of lake.channels) {
+        for (const p of c.path) softBlob(ctx, p.x, p.y, c.w * 0.95, c.w * 0.95, 0, deep, 0.3);
+      }
     }
     // Shallows: stacked strokes along the shore make a smooth ramp from the
     // sandy margin down into deep water.
-    const shallow = pal.shallow || mix(pal.patchTeal, pal.sand, 0.38);
     for (let i = 0; i < 16; i++) {
       const k = i / 15;
       ctx.strokeStyle = rgb(shallow, 0.03 + k * 0.04); ctx.lineWidth = 240 - 222 * Math.pow(k, 0.8);
@@ -874,15 +902,18 @@ const Art = (() => {
       if (!inView(w.x, w.y, w.len + 30)) continue;
       const n = noise(w.x * 0.0035, w.y * 0.0035, t + w.seed * 0.5);
       if (n < 0.64) continue;
-      const drift = (t * 10 + w.seed * 30) % 60 - 30;
+      // On a river each wavelet carries its own flow (w.fx, w.fy, w.sp);
+      // on a lake they all drift with the wind.
+      const dx = w.fx != null ? w.fx : wx, dy = w.fx != null ? w.fy : wy;
+      const drift = (t * 10 * (w.sp || 1) + w.seed * 30) % 60 - 30;
       const fade = 1 - Math.abs(drift) / 30;       // ease in and out as the crest drifts
-      const lx = w.x + wx * drift, ly = w.y + wy * drift;
+      const lx = w.x + dx * drift, ly = w.y + dy * drift;
       const ca = w.a + Math.PI / 2;                // crests lie across the wind
       const hx = Math.cos(ca) * w.len * 0.5, hy = Math.sin(ca) * w.len * 0.5;
       ctx.strokeStyle = rgb(wc, Math.min(0.85, (n - 0.64) * 3.2) * fade);
       ctx.beginPath();
       ctx.moveTo(lx - hx, ly - hy);
-      ctx.quadraticCurveTo(lx + wx * 3, ly + wy * 3, lx + hx, ly + hy);
+      ctx.quadraticCurveTo(lx + dx * 3, ly + dy * 3, lx + hx, ly + hy);
       ctx.stroke();
       if (n > 0.78) {
         ctx.fillStyle = rgb(sparkle, Math.min(0.9, (n - 0.78) * 6) * fade);
@@ -897,6 +928,35 @@ const Art = (() => {
       ctx.fillStyle = rgb(mp, a * 0.16);
       ctx.beginPath(); ctx.ellipse(p.x, p.y, 2 + a * 3, 1 + a * 1.5, 0, 0, TAU); ctx.fill();
     }
+    ctx.restore();
+  }
+
+  // Broken water in the riffles: short white streaks racing downstream,
+  // fading in and out. Batched into three strokes by brightness.
+  function drawRiverFx() {
+    if (!lake.chop || zoom < 0.5) return;
+    const ctx = drawingContext, f = frameCount, T = 70;
+    const fc = lvl().palette.foam || [240, 248, 246];
+    const lanes = [[], [], []];
+    for (const c of lake.chop) {
+      if (!inView(c.x, c.y, 30)) continue;
+      const ph = (f + c.seed) % T, fade = Math.sin((ph / T) * Math.PI);
+      const off = (ph - T / 2) * 0.55 * c.sp;
+      const wob = Math.sin(f * 0.2 + c.seed) * 1.1;
+      const x = c.x + c.fx * off - c.fy * wob, y = c.y + c.fy * off + c.fx * wob;
+      const hx = c.fx * c.len * 0.5, hy = c.fy * c.len * 0.5;
+      lanes[fade > 0.66 ? 2 : fade > 0.33 ? 1 : 0].push(x - hx, y - hy, x + hx, y + hy);
+    }
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineWidth = 1.15;
+    [0.14, 0.32, 0.56].forEach((a, i) => {
+      const L = lanes[i];
+      if (!L.length) return;
+      ctx.strokeStyle = rgb(fc, a);
+      ctx.beginPath();
+      for (let k = 0; k < L.length; k += 4) { ctx.moveTo(L[k], L[k + 1]); ctx.lineTo(L[k + 2], L[k + 3]); }
+      ctx.stroke();
+    });
     ctx.restore();
   }
 
@@ -937,6 +997,9 @@ const Art = (() => {
 
   function drawCanopies() {
     const ctx = drawingContext, tt = frameCount * 0.012;
+    // On foot the angler walks under the trees, so any canopy they are
+    // beneath thins out to keep them in sight.
+    const walker = (player && player.onFoot) ? player.pos : null;
     for (const t of trees) {
       if (t.hidden || !inView(t.x, t.y, t.cr * 1.3)) continue;
       const spr = S.trees[t.variant];
@@ -944,6 +1007,10 @@ const Art = (() => {
       const k = t.cr / TREE_R;
       const sway = Math.sin(tt + t.x * 0.01 + t.y * 0.013) * (0.5 + wind.strength * 0.5);
       ctx.save();
+      if (walker) {
+        const d = Math.hypot(walker.x - t.x, walker.y - t.y);
+        if (d < t.cr * 1.15) ctx.globalAlpha = 0.28 + 0.72 * Math.max(0, (d - t.cr * 0.75) / (t.cr * 0.4));
+      }
       ctx.translate(t.x + sway * 0.9, t.y + sway * 0.55);
       ctx.rotate(sway * 0.012);
       ctx.scale(k, k);
@@ -986,6 +1053,29 @@ const Art = (() => {
       ctx.beginPath();
       ctx.ellipse(r.x, r.y, r.r * (0.98 + pulse * 0.07), r.r * (0.8 + pulse * 0.06), 0, 0, TAU);
       ctx.stroke();
+    }
+    if (r.fx != null) {
+      // A boulder in the current: white water piles against the upstream
+      // face, two seams of foam trail off downstream, and between them lies
+      // the slack pocket where a trout can hold out of the flow.
+      const fc = lvl().palette.foam || [240, 248, 246];
+      const fx = r.fx, fy = r.fy, px = -fy, py = fx, R = r.r, f = frameCount;
+      ctx.fillStyle = 'rgba(6,28,34,0.2)';
+      ctx.beginPath(); ctx.ellipse(r.x + fx * R * 1.9, r.y + fy * R * 1.9, R * 1.25, R * 0.72, Math.atan2(fy, fx), 0, TAU); ctx.fill();
+      ctx.lineCap = 'round';
+      ctx.setLineDash([5, 6]); ctx.lineDashOffset = -f * 0.45 * (r.sp || 0.6);
+      ctx.lineWidth = 1.2; ctx.strokeStyle = rgb(fc, 0.42);
+      for (const sd of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(r.x + px * sd * R * 0.9, r.y + py * sd * R * 0.9);
+        ctx.quadraticCurveTo(r.x + fx * R * 1.8 + px * sd * R * 0.95, r.y + fy * R * 1.8 + py * sd * R * 0.95,
+          r.x + fx * R * 3.8 + px * sd * R * 0.35, r.y + fy * R * 3.8 + py * sd * R * 0.35);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      const up = Math.atan2(-fy, -fx), surge = 0.5 + 0.5 * Math.sin(f * 0.12 + r.x);
+      ctx.strokeStyle = rgb(fc, 0.5 + surge * 0.3); ctx.lineWidth = 1.5 + surge * 0.8;
+      ctx.beginPath(); ctx.arc(r.x, r.y, R * 1.02, up - 1.05, up + 1.05); ctx.stroke();
     }
     const k = r.r / ROCK_R;
     ctx.drawImage(spr, r.x - spr.width * k / 2, r.y - spr.height * k / 2, spr.width * k, spr.height * k);
@@ -1198,6 +1288,127 @@ const Art = (() => {
     return { hx, hy, tx: hx + ax * k * s, ty: hy + ay * k * s };
   }
 
+  // Fly rod in hand: cork grip, reel, and a blank that tapers to the tip.
+  // `rod` is a rodPose result plus { ax, ay, k, bend }.
+  function paintRod(ctx, s, rod) {
+    const { hx, hy, tx, ty, ax, ay } = rod, sg = rod.k < 0 ? -1 : 1;
+    // A loaded rod bows sideways a touch; the curve runs through this point.
+    const cx = (hx + tx) / 2 - ay * (rod.bend || 0) * s, cy = (hy + ty) / 2 + ax * (rod.bend || 0) * s;
+    const blank = (t0, t1) => {
+      const at = (t) => [(1 - t) * (1 - t) * hx + 2 * t * (1 - t) * cx + t * t * tx,
+                         (1 - t) * (1 - t) * hy + 2 * t * (1 - t) * cy + t * t * ty];
+      ctx.beginPath();
+      for (let i = 0; i <= 6; i++) {
+        const [x, y] = at(t0 + (t1 - t0) * i / 6);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    };
+    const line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    ctx.strokeStyle = 'rgba(0,10,12,0.4)'; ctx.lineWidth = s * 0.09; blank(0, 1);     // contrast on any water
+    ctx.strokeStyle = 'rgb(206,162,82)'; ctx.lineWidth = s * 0.065; blank(0, 0.45);   // butt section
+    ctx.strokeStyle = 'rgb(226,190,116)'; ctx.lineWidth = s * 0.038; blank(0.45, 1);  // fine tip
+    ctx.strokeStyle = 'rgb(150,108,62)'; ctx.lineWidth = s * 0.075;                   // cork grip
+    line(hx - ax * sg * 0.08 * s, hy - ay * sg * 0.08 * s, hx + ax * sg * 0.07 * s, hy + ay * sg * 0.07 * s);
+    ctx.fillStyle = 'rgb(170,172,178)';                                               // reel
+    ctx.beginPath();
+    ctx.ellipse(hx - ax * sg * 0.06 * s - ay * 0.055 * s, hy - ay * sg * 0.06 * s + ax * 0.055 * s, 0.05 * s, 0.05 * s, 0, 0, TAU);
+    ctx.fill();
+  }
+
+  // Head and hat from above. The brim points wherever the angler is
+  // looking; (lx, ly) is the light direction in the figure's own frame.
+  function paintHead(ctx, s, hat, lx, ly, lookX, lookY) {
+    const ell = (x, y, rx, ry, rot = 0) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, TAU); };
+    ell(0.03 * s + lookX * 0.1 * s, lookY * 0.1 * s, 0.12 * s, 0.15 * s, Math.atan2(lookY, lookX));
+    ctx.fillStyle = rgb(shade(hat, 0.76)); ctx.fill();
+    ell(0.03 * s, 0, 0.13 * s, 0.13 * s); ctx.fillStyle = 'rgb(226,196,156)'; ctx.fill();
+    ell(0.02 * s, 0, 0.15 * s, 0.15 * s); ctx.fillStyle = rgb(hat); ctx.fill();
+    ell(0.02 * s + lx * 0.05 * s, ly * 0.05 * s, 0.075 * s, 0.075 * s);
+    ctx.fillStyle = rgb(mix(hat, [255, 255, 255], 0.2)); ctx.fill();
+  }
+
+  // An angler on foot, from above — hiking the bank or wading the river.
+  // Same figure, colors and rod as the paddler in the kayak. Expects the
+  // context translated to the angler and rotated to their heading (+x = the
+  // way they face).
+  //   o.heading    world heading, so light and shadow stay put as they turn
+  //   o.walkPhase  stride cycle
+  //   o.speed      current speed (boots only stride while moving)
+  //   o.wade       0 on dry land, otherwise how deep they stand (0..1)
+  //   o.casting    a cast is out; otherwise the rod is carried low
+  //   o.rod        { ax, ay, k, stroke, bend } — where the rod points
+  function wader(ctx, s, ap, o = {}) {
+    const pp = PFD_PALETTES[ap && ap.pfd] || PFD_PALETTES.orange;
+    const hat = HAT_PALETTES[ap && ap.hat] || HAT_PALETTES.green;
+    const h = o.heading || 0, cosH = Math.cos(h), sinH = Math.sin(h);
+    const local = (x, y) => [x * cosH + y * sinH, -x * sinH + y * cosH];
+    const [shx, shy] = local(0.1 * s, 0.16 * s);
+    const [lx, ly] = local(LIGHT.x, LIGHT.y);
+    const ell = (x, y, rx, ry, rot = 0) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, TAU); };
+    const seg = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    const wade = o.wade || 0, ph = o.walkPhase || 0, moving = (o.speed || 0) > 0.15;
+    const f = typeof frameCount === 'number' ? frameCount : 0;
+
+    ctx.save();
+    if (o.alpha != null) ctx.globalAlpha = o.alpha;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    if (wade > 0) {
+      // Standing in the river: the water parts round the legs and the
+      // lower body shows only as a darker shape under the surface.
+      const rc = lvl().palette.ripple || [220, 240, 255];
+      const pulse = 0.5 + 0.5 * Math.sin(f * 0.09);
+      ctx.strokeStyle = rgb(rc, 0.45); ctx.lineWidth = s * 0.03;
+      ell(-0.02 * s, 0, (0.3 + pulse * 0.04) * s, (0.36 + pulse * 0.04) * s); ctx.stroke();
+      ctx.strokeStyle = rgb(rc, 0.2 * (1 - pulse));
+      ell(-0.02 * s, 0, (0.4 + pulse * 0.14) * s, (0.46 + pulse * 0.14) * s); ctx.stroke();
+      ctx.fillStyle = `rgba(6,26,30,${0.2 + 0.25 * Math.min(1, wade * 1.6)})`;
+      ell(-0.02 * s, 0, 0.24 * s, 0.3 * s); ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(0,12,10,0.3)';                       // shadow on the ground
+      ell(shx - 0.02 * s, shy, 0.24 * s, 0.3 * s); ctx.fill();
+      const st = moving ? Math.sin(ph) * 0.2 * s : 0;             // boots, striding
+      ctx.fillStyle = 'rgb(86,92,70)';                            // wader legs
+      ell(-0.02 * s + st * 0.5, 0.11 * s, 0.12 * s, 0.075 * s); ctx.fill();
+      ell(-0.02 * s - st * 0.5, -0.11 * s, 0.12 * s, 0.075 * s); ctx.fill();
+      ctx.fillStyle = 'rgb(54,44,34)';
+      ell(0.06 * s + st, 0.11 * s, 0.1 * s, 0.065 * s); ctx.fill();
+      ell(0.06 * s - st, -0.11 * s, 0.1 * s, 0.065 * s); ctx.fill();
+    }
+
+    // Landing net slung across the back.
+    ctx.strokeStyle = 'rgb(120,88,50)'; ctx.lineWidth = s * 0.035;
+    seg(-0.12 * s, -0.02 * s, -0.2 * s, -0.05 * s);
+    ell(-0.3 * s, -0.08 * s, 0.11 * s, 0.14 * s, -0.4);
+    ctx.fillStyle = 'rgba(232,232,220,0.22)'; ctx.fill();
+    ctx.strokeStyle = 'rgb(156,116,66)'; ctx.stroke();
+
+    // Torso in a fishing vest (the player's PFD color).
+    ell(-0.02 * s, 0, 0.16 * s, 0.26 * s); ctx.fillStyle = rgb(pp.dark); ctx.fill();
+    ell(-0.02 * s + lx * 0.03 * s, ly * 0.03 * s, 0.135 * s, 0.225 * s); ctx.fillStyle = rgb(pp.base); ctx.fill();
+    ctx.fillStyle = rgb(shade(pp.dark, 0.78), 0.85);              // chest pockets
+    ell(0.05 * s, 0.1 * s, 0.045 * s, 0.05 * s); ctx.fill();
+    ell(0.05 * s, -0.1 * s, 0.045 * s, 0.05 * s); ctx.fill();
+
+    // Rod hand: carried low and forward when walking, driven through the
+    // casting stroke with a cast out. The other arm swings with the stride
+    // or tends line.
+    const rd = (o.casting && o.rod) || { ax: Math.cos(0.14), ay: Math.sin(0.14), k: 1.2, stroke: -0.2, bend: 0 };
+    const rod = Object.assign({}, rd, rodPose(s, rd.ax, rd.ay, rd.k, rd.stroke || 0));
+    const off = o.casting ? [0.17 * s, -0.07 * s]
+                          : [(0.06 - (moving ? Math.sin(ph) * 0.16 : 0)) * s, -0.26 * s];
+    ctx.strokeStyle = rgb(shade(pp.dark, 0.82)); ctx.lineWidth = s * 0.1;
+    seg(-0.02 * s, 0.2 * s, rod.hx, rod.hy);
+    seg(-0.02 * s, -0.2 * s, off[0], off[1]);
+    ctx.fillStyle = 'rgb(226,196,156)';
+    ell(rod.hx, rod.hy, 0.05 * s, 0.05 * s); ctx.fill();
+    ell(off[0], off[1], 0.05 * s, 0.05 * s); ctx.fill();
+    paintRod(ctx, s, rod);
+    paintHead(ctx, s, hat, lx, ly, o.casting ? rd.ax : 1, o.casting ? rd.ay : 0);
+    ctx.restore();
+  }
+
   // The kayak and its paddler, from above. One painter for the player, the
   // other anglers in a derby, and the profile preview. Expects the context
   // translated to the kayak and rotated to its heading (+x = bow).
@@ -1319,37 +1530,8 @@ const Art = (() => {
     ctx.fillStyle = 'rgb(226,196,156)';                                                             // hands
     for (const [hx, hy] of hands) { ell(hx, hy, 0.05 * s, 0.05 * s); ctx.fill(); }
 
-    if (rod) {
-      const { hx, hy, tx, ty, ax, ay } = rod, sg = rod.k < 0 ? -1 : 1;
-      // A loaded rod bows sideways a touch; the curve runs through this point.
-      const cx = (hx + tx) / 2 - ay * (rod.bend || 0) * s, cy = (hy + ty) / 2 + ax * (rod.bend || 0) * s;
-      const blank = (t0, t1) => {
-        const at = (t) => [(1 - t) * (1 - t) * hx + 2 * t * (1 - t) * cx + t * t * tx,
-                           (1 - t) * (1 - t) * hy + 2 * t * (1 - t) * cy + t * t * ty];
-        ctx.beginPath();
-        for (let i = 0; i <= 6; i++) {
-          const [x, y] = at(t0 + (t1 - t0) * i / 6);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      };
-      ctx.strokeStyle = 'rgba(0,10,12,0.4)'; ctx.lineWidth = s * 0.09; blank(0, 1);     // contrast on any water
-      ctx.strokeStyle = 'rgb(206,162,82)'; ctx.lineWidth = s * 0.065; blank(0, 0.45);   // butt section
-      ctx.strokeStyle = 'rgb(226,190,116)'; ctx.lineWidth = s * 0.038; blank(0.45, 1);  // fine tip
-      ctx.strokeStyle = 'rgb(150,108,62)'; ctx.lineWidth = s * 0.075;                   // cork grip
-      seg(hx - ax * sg * 0.08 * s, hy - ay * sg * 0.08 * s, hx + ax * sg * 0.07 * s, hy + ay * sg * 0.07 * s);
-      ctx.fillStyle = 'rgb(170,172,178)';                                               // reel
-      ell(hx - ax * sg * 0.06 * s - ay * 0.055 * s, hy - ay * sg * 0.06 * s + ax * 0.055 * s, 0.05 * s, 0.05 * s);
-      ctx.fill();
-    }
-
-    // Head and hat. The brim points wherever the angler is looking.
-    ell(0.03 * s + lookX * 0.1 * s, lookY * 0.1 * s, 0.12 * s, 0.15 * s, Math.atan2(lookY, lookX));
-    ctx.fillStyle = rgb(shade(hat, 0.76)); ctx.fill();
-    ell(0.03 * s, 0, 0.13 * s, 0.13 * s); ctx.fillStyle = 'rgb(226,196,156)'; ctx.fill();           // head
-    ell(0.02 * s, 0, 0.15 * s, 0.15 * s); ctx.fillStyle = rgb(hat); ctx.fill();                     // crown
-    ell(0.02 * s + lx * 0.05 * s, ly * 0.05 * s, 0.075 * s, 0.075 * s);
-    ctx.fillStyle = rgb(mix(hat, [255, 255, 255], 0.2)); ctx.fill();
+    if (rod) paintRod(ctx, s, rod);
+    paintHead(ctx, s, hat, lx, ly, lookX, lookY);
     ctx.restore();
   }
 
@@ -1371,8 +1553,8 @@ const Art = (() => {
 
   return {
     prepareWorld, bakeStatic,
-    drawCloudShadows, drawWaterFx, drawShoreFoam, drawCanopies,
+    drawCloudShadows, drawWaterFx, drawRiverFx, drawShoreFoam, drawCanopies,
     drawLily, drawRock, drawLog, drawSnag, drawCattail, drawWeed,
-    fishShadow, kayak, kayakWake, rodPose, drawScreenFx, roundRect,
+    fishShadow, kayak, wader, kayakWake, rodPose, drawScreenFx, roundRect,
   };
 })();

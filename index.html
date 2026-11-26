@@ -276,6 +276,7 @@
             <select id="derby-host-level">
               <option value="bassLake">Bass Lake — panfish + bass</option>
               <option value="alpineLake">Alpine Lake — trout</option>
+              <option value="troutRiver">Trout River — wade for trout</option>
             </select>
           </div>
           <div class="derby-row"><label>Length</label>
@@ -479,6 +480,11 @@
       background-image:
         linear-gradient(rgba(10, 22, 18, 0.55), rgba(10, 22, 18, 0.78)),
         url('images/alpine-lake-bg.png');
+    }
+    body.level-troutRiver #menu {
+      background-image:
+        linear-gradient(rgba(10, 22, 18, 0.55), rgba(10, 22, 18, 0.78)),
+        url('images/bass-lake-bg.png');
     }
     /* margin:auto on a flex child centers it vertically when there is
        room, and lets the card scroll naturally when there isn't. */
@@ -2472,10 +2478,10 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="multiplayer.js?v=62"></script>
-  <script src="sprites.js?v=62"></script>
-  <script src="visuals.js?v=62"></script>
-  <script src="sketch.js?v=62"></script>
+  <script src="multiplayer.js?v=63"></script>
+  <script src="sprites.js?v=63"></script>
+  <script src="visuals.js?v=63"></script>
+  <script src="sketch.js?v=63"></script>
   <script>
     // Studio splash — click or tap to skip; otherwise auto-dismisses via
     // the CSS animation after ~2.6s. Remove from DOM after fade so it

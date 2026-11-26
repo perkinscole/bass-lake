@@ -391,6 +391,74 @@ const LEVELS = {
     unlocked: false,
     unlockCost: 150,
   },
+  troutRiver: {
+    name: 'Trout River',
+    blurb: 'wade and hike a cold freestone river · trout in the holes and riffles',
+    heroPool: ['images/alpine-guy.png', 'images/alpine-girl.png'],
+    bgImg:   'images/bass-lake-bg.png',
+    // No boat here. The world is a river between two ponds and the angler
+    // travels on foot — hiking the banks, wading wherever it is shallow
+    // enough. `river` picks the River world; `onFoot` picks the Wader.
+    river: true,
+    onFoot: true,
+    startZoom: 2.1,          // a person is far smaller than a kayak; start closer in
+    terrainBlobs: {
+      count: 220,
+      types: [
+        { c: [54, 78, 40],   a: 120, range: [60, 150] }, // shaded understory
+        { c: [104, 110, 62], a:  90, range: [40, 110] }, // dry grass
+        { c: [60, 92, 46],   a: 110, range: [70, 170] }, // meadow
+        { c: [96, 86, 66],   a:  80, range: [30, 80]  }, // bare earth and duff
+      ],
+    },
+    palette: {
+      wavelet:   [206, 232, 226],
+      caustic:   [170, 222, 206],
+      bubble:    [228, 244, 250],
+      ripple:    [228, 244, 250],
+      foam:      [244, 250, 248],
+      flyLine:   [240, 232, 150],
+      sparkle:   [255, 255, 250],
+      fishVisDepth:     0.46,     // clear water: trout show well down in the column
+      predatorVisDepth: 0.46,
+      forest:    [72, 98, 52],
+      forestSpeck: [58, 82, 44],
+      sand:      [172, 164, 142],  // grey-tan gravel bars
+      shoreline: [44, 40, 32],
+      waterBase: [44, 98, 100],    // cold green-blue
+      patchTeal: [78, 146, 136],
+      patchAlgae:[26, 66, 72],
+      patchTannin:[84, 104, 78],
+      deep:      [16, 50, 58],     // the bottom of a hole
+      shallow:   [128, 158, 132],
+      riffle:    [164, 172, 146],  // thin water over pale cobble
+      ambient:   [200, 226, 214],
+      bgClear:   [20, 30, 22],
+    },
+    treeStyle: 'deciduous',
+    species:   ['rainbowTrout', 'brookTrout', 'brownTrout', 'cutthroatTrout'],
+    catches: {
+      fly:         ['rainbowTrout', 'brookTrout'],
+      nymph:       ['rainbowTrout', 'brookTrout', 'cutthroatTrout'],
+      woolyBugger: ['brownTrout', 'cutthroatTrout'],
+    },
+    rewards: { rainbowTrout: 14, brookTrout: 18, cutthroatTrout: 30, brownTrout: 40 },
+    spawn:   { rainbowTrout: 46, brookTrout: 34, cutthroatTrout: 14, brownTrout: 12 },
+    // Where each trout likes to hold. Rainbows spread through fast and
+    // slow water; brookies tuck in behind rocks and in the riffles;
+    // cutthroat take the pools and pockets; big browns own the deep holes
+    // and the undercut banks.
+    lies: {
+      rainbowTrout:   ['riffle', 'run', 'pool', 'pocket'],
+      brookTrout:     ['pocket', 'riffle', 'bank'],
+      cutthroatTrout: ['pool', 'pocket', 'run'],
+      brownTrout:     ['pool', 'bank'],
+    },
+    propCounts: { lilypads: 0, weeds: 80, cattails: 50, trees: 430, logs: 26, rocks: 260, snags: 8 },
+    midRocks: 150,           // boulders out in the current
+    unlocked: false,
+    unlockCost: 200,
+  },
 };
 let currentLevel = 'bassLake';
 function lvl() { return LEVELS[currentLevel]; }
@@ -403,7 +471,7 @@ const PROGRESS_KEY = 'bassLakeState_v2';
 let playerState = {
   money: 0,
   level: 'bassLake',
-  levelsUnlocked: { bassLake: true, alpineLake: false },
+  levelsUnlocked: { bassLake: true, alpineLake: false, troutRiver: false },
   unlocks: {
     // All three fly categories are usable from the start — the economy
     // now gates which specific PATTERNS the player owns via flyStock, not
@@ -456,14 +524,16 @@ function flyPackCost(pricePerFly, qty) {
 
 function refreshUnlocks() {
   MAX_CAST_RANGE = ROD_RANGES[playerState.unlocks.rod] || 220;
-  if (player) player.maxSpeed = KAYAK_BASE_SPEED * (KAYAK_SPEEDS[playerState.unlocks.kayak] || 1);
+  // Kayak upgrades only matter in a boat; on foot the pace is fixed.
+  if (player && !player.onFoot) player.maxSpeed = KAYAK_BASE_SPEED * (KAYAK_SPEEDS[playerState.unlocks.kayak] || 1);
   // hide sonar element if not unlocked
   // Show sonar only when it's unlocked AND the player hasn't hidden it.
   // The hidden state is its own preference (persisted via saveProgress)
   // so toggling it doesn't lose the unlock.
   const sonarEl    = document.getElementById('sonar');
   const sonarShowEl = document.getElementById('sonar-show');
-  const owned  = !!playerState.unlocks.sonar;
+  // The fish finder is mounted on the kayak, so it stays behind on foot.
+  const owned  = !!playerState.unlocks.sonar && !lvl().onFoot;
   const hidden = !!playerState.sonarHidden;
   if (sonarEl)     sonarEl.style.display     = (owned && !hidden) ? '' : 'none';
   if (sonarShowEl) sonarShowEl.classList.toggle('hidden', !owned || !hidden);
@@ -769,11 +839,24 @@ function buildWorld(seed) {
   topoFeatures = []; terrainBlobs = [];
   ripples = []; bubbles = []; eagle = null;
 
-  lake = new Lake(WORLD_W, WORLD_H);
+  lake = lvl().river ? new River(WORLD_W, WORLD_H) : new Lake(WORLD_W, WORLD_H);
 
-  // spawn the kayak in the first basin and center the camera on it
-  let b = lake.basins[0];
-  player = new Kayak(b.x, b.y);
+  // Lake levels put the kayak in the first basin. The river puts the angler
+  // on a gravel bar beside the first riffle, zoomed in to a walking scale.
+  if (lvl().onFoot) {
+    const st = lake.startPoint || lake.basins[0];
+    player = new Wader(st.x, st.y);
+    zoom = lvl().startZoom || 1.6;
+  } else {
+    let b = lake.basins[0];
+    player = new Kayak(b.x, b.y);
+  }
+  const hint = document.getElementById('hud-controls');
+  if (hint) {
+    hint.textContent = lvl().onFoot
+      ? 'W A S D hike + wade · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly · ESC menu'
+      : 'W S paddle · A D turn · hold mouse to false-cast · release to deliver · scroll zoom · 1/2/3 fly · ESC menu';
+  }
   cam.x = constrain(player.pos.x - width / (2 * zoom), 0, WORLD_W - width / zoom);
   cam.y = constrain(player.pos.y - height / (2 * zoom), 0, WORLD_H - height / zoom);
 
@@ -827,6 +910,24 @@ function buildWorld(seed) {
       r: random(6, 18),
       shade: 60 + random(-20, 30),
     });
+  }
+
+  // Boulders out in the current (river only). Each one remembers the flow
+  // where it sits, for its white water, and leaves a lie in the slack
+  // pocket just downstream — classic trout water.
+  if (lake.course && lvl().midRocks) {
+    const runs = lake.course.filter(p => p.type === 'riffle' || p.type === 'run');
+    for (let i = 0; i < lvl().midRocks && runs.length; i++) {
+      const p = random(runs), hw = p.w * 0.39;
+      const lat = random(-0.7, 0.7) * hw, along = random(-20, 20);
+      const x = p.x - p.ty * lat + p.tx * along, y = p.y + p.tx * lat + p.ty * along;
+      if (!lake.contains(x, y, 14)) continue;
+      const r = random(8, 20);
+      if (rocks.some(o => o.mid && Math.hypot(o.x - x, o.y - y) < o.r + r + 26)) continue;
+      const f = lake.flowAt(x, y);
+      rocks.push({ x, y, r, shade: 60 + random(-20, 30), mid: true, fx: f.x, fy: f.y, sp: f.speed });
+      lake.lies.push({ x: x + f.x * (r + 16), y: y + f.y * (r + 16), type: 'pocket' });
+    }
   }
 
   // Topographic features (alpine) — concentric contour rings centered on
@@ -908,11 +1009,11 @@ function buildWorld(seed) {
     let cfg = SPECIES[species];
     if (!cfg) continue;
     for (let i = 0; i < count; i++) {
-      let p = pickSpawnPoint(cfg);
+      let p = pickSpawnPoint(cfg, species);
       if (cfg.class === 'bass') {
         bass.push(new Bass(p.x, p.y, species));
       } else {
-        panfish.push(new Panfish(p.x, p.y, species));
+        panfish.push(new Panfish(p.x, p.y, species, p.lie));
       }
     }
   }
@@ -1358,8 +1459,16 @@ function applyMenuChromeForLevel(id) {
   if (heroEl && heroSrc) heroEl.src = heroSrc;
   // body.level-<id> — CSS keys the bg image off this so adding a new
   // level is just an extra class rule.
-  document.body.classList.remove('level-bassLake', 'level-alpineLake');
+  document.body.classList.remove(...Object.keys(LEVELS).map(k => 'level-' + k));
   document.body.classList.add('level-' + id);
+  // The movement keys read differently in a boat and on foot.
+  const rows = document.querySelectorAll('#menu .ctrl-row');
+  if (rows.length >= 2) {
+    rows[0].innerHTML = L.onFoot ? '<span class="key">W A S D</span> hike the bank and wade the shallows'
+                                 : '<span class="key">W S</span> paddle forward / back';
+    rows[1].innerHTML = L.onFoot ? '<span class="key">deep</span> the holes are over your waders — fish them from the edge'
+                                 : '<span class="key">A D</span> turn the kayak';
+  }
 }
 
 async function onLevelCardClick(id) {
@@ -1937,7 +2046,21 @@ function jitterAround(obj, r) {
   return { x: obj.x + random(-r, r), y: obj.y + random(-r, r) };
 }
 
-function pickSpawnPoint(cfg) {
+// A holding lie for this species on a river — a spot in a pool, riffle,
+// pocket or under a bank, per the level's `lies` table.
+function pickLie(species) {
+  if (!lake.lies || !lake.lies.length) return null;
+  const want = (lvl().lies && lvl().lies[species]) || null;
+  const pool = want ? lake.lies.filter(l => want.includes(l.type)) : lake.lies;
+  return random(pool.length ? pool : lake.lies);
+}
+
+function pickSpawnPoint(cfg, species) {
+  // On a river every fish starts at a lie and comes back to it.
+  if (lake.lies && species) {
+    const lie = pickLie(species);
+    if (lie) return { x: lie.x + random(-10, 10), y: lie.y + random(-10, 10), lie };
+  }
   // Habitat-aware spawn for both panfish-class and bass-class species.
   let p;
   if (cfg.class === 'bass') {
@@ -2021,6 +2144,7 @@ function draw() {
   // cattails), birds, lily pads, kayaks, and finally the tree canopies
   // that lean out over the bank.
   Art.drawWaterFx();
+  Art.drawRiverFx();
   for (let w of weeds) { if (inView(w.x, w.y, w.h)) Art.drawWeed(w); }
 
   for (let i = ripples.length - 1; i >= 0; i--) {
@@ -2297,8 +2421,8 @@ function draw() {
     let lowest = _underrepresentedSpecies(panfish, levelSpawn, 'panfish');
     if (lowest) {
       let cfg = SPECIES[lowest];
-      let p = pickSpawnPoint(cfg);
-      panfish.push(new Panfish(p.x, p.y, lowest));
+      let p = pickSpawnPoint(cfg, lowest);
+      panfish.push(new Panfish(p.x, p.y, lowest, p.lie));
     }
   }
 }
@@ -2929,6 +3053,386 @@ class Lake {
   }
 }
 
+// ---------- RIVER ----------
+// A river world: a winding course between a headwater pond and a tail
+// pond, broken into the reaches a fly angler reads —
+//   riffle  wide, shallow and fast over cobble
+//   run     steady, knee-to-waist deep
+//   pool    slow and deep: the "holes", too deep to wade through
+// It is a Lake underneath (same shoreline, same contains() and depthAt()),
+// so everything that works on a lake works here. It adds:
+//   course     the centerline, each point carrying type, depth, speed,
+//              width and flow direction
+//   flowAt()   the current at a point
+//   lies       places a trout would hold
+//   chop       broken-water points in the riffles, for drawing
+//   startPoint a gravel bar to begin on
+class River extends Lake {
+  _pickBasins() {
+    this._layCourse();
+    const a = this.course[0], b = this.course[this.course.length - 1];
+    return [
+      { x: a.x, y: a.y, r: random(330, 400) },     // headwater pond
+      { x: b.x, y: b.y, r: random(380, 460) },     // tail pond
+    ];
+  }
+
+  // The Lake constructor expects channels joining its basins; ours is the
+  // one river. (The field and depth are rebuilt below from the course, so
+  // only code that walks channels[].path sees this.)
+  _connectBasins() {
+    const path = this.course, segments = [];
+    for (let k = 0; k < path.length - 1; k++) segments.push({ a: path[k], b: path[k + 1] });
+    return [{ a: path[0], b: path[path.length - 1], path, segments, w: 230, boost: 0.95 }];
+  }
+
+  _layCourse() {
+    // Corner to corner, swinging side to side in big meanders.
+    const m = 640;
+    const S = { x: random(m, m + 480), y: random(m, m + 280) };
+    const E = { x: this.w - random(m, m + 480), y: this.h - random(m, m + 280) };
+    const dx = E.x - S.x, dy = E.y - S.y, len = Math.hypot(dx, dy), px = -dy / len, py = dx / len;
+    const n = 9;
+    let side = random() < 0.5 ? 1 : -1, pts = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const off = (i === 0 || i === n - 1) ? 0 : side * random(520, 1000) * (0.45 + 0.55 * Math.sin(t * Math.PI));
+      side = -side;
+      pts.push({
+        x: constrain(S.x + dx * t + px * off, m, this.w - m),
+        y: constrain(S.y + dy * t + py * off, m, this.h - m),
+      });
+    }
+    for (let it = 0; it < 4; it++) {                // Chaikin corner-cutting rounds the bends
+      const next = [pts[0]];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        next.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 });
+        next.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+      }
+      next.push(pts[pts.length - 1]);
+      pts = next;
+    }
+    // Even spacing, so a step along the course is always the same distance.
+    const STEP = 40, course = [{ x: pts[0].x, y: pts[0].y }];
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], d = Math.hypot(b.x - a.x, b.y - a.y);
+      acc += d;
+      while (acc >= STEP) {
+        acc -= STEP;
+        const t = 1 - acc / d;
+        course.push({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) });
+      }
+    }
+    // Riffle, run, pool, run — and round again.
+    const N = course.length, cycle = ['riffle', 'run', 'pool', 'run'];
+    const lens = { riffle: [7, 11], run: [5, 8], pool: [8, 13] };
+    let k = 7, c = 0;
+    for (const p of course) p.type = 'pond';        // the ends, where it meets the ponds
+    while (k < N - 8) {
+      const type = cycle[c++ % 4], span = Math.floor(random(lens[type][0], lens[type][1] + 1));
+      for (let j = k; j < Math.min(k + span, N - 7); j++) course[j].type = type;
+      k += span;
+    }
+    const DEPTH = { pond: 0.5, riffle: 0.14, run: 0.45, pool: 0.95 };
+    const SPEED = { pond: 0.15, riffle: 1.0, run: 0.6, pool: 0.25 };
+    const WIDTH = { pond: 240, riffle: 285, run: 225, pool: 255 };
+    const raw = course.map((p, i) => ({
+      d: DEPTH[p.type], sp: SPEED[p.type],
+      w: WIDTH[p.type] * (0.9 + 0.2 * noise(i * 0.13, 7.7)),
+    }));
+    for (let i = 0; i < N; i++) {                   // ease from one reach into the next
+      let d = 0, sp = 0, w = 0, cnt = 0;
+      for (let j = Math.max(0, i - 2); j <= Math.min(N - 1, i + 2); j++) { d += raw[j].d; sp += raw[j].sp; w += raw[j].w; cnt++; }
+      const p = course[i], a = course[Math.max(0, i - 1)], b = course[Math.min(N - 1, i + 1)];
+      const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      p.depth = d / cnt; p.speed = sp / cnt; p.w = w / cnt;
+      p.tx = (b.x - a.x) / tl; p.ty = (b.y - a.y) / tl;     // downstream
+    }
+    this.course = course;
+  }
+
+  // For every grid node near the river: distance to the centerline, and
+  // which stretch of it is nearest. Built once; the field, the depth and
+  // flowAt() all read from it.
+  _courseGrid() {
+    const C = this.cols + 1, R = this.rows + 1, g = this.gridSize, REACH = 340;
+    this._cd = new Float32Array(C * R).fill(1e9);
+    this._cs = new Float32Array(C * R).fill(-1);
+    const course = this.course;
+    for (let k = 0; k < course.length - 1; k++) {
+      const a = course[k], b = course[k + 1];
+      const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - REACH) / g)), i1 = Math.min(C - 1, Math.ceil((Math.max(a.x, b.x) + REACH) / g));
+      const j0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - REACH) / g)), j1 = Math.min(R - 1, Math.ceil((Math.max(a.y, b.y) + REACH) / g));
+      const ex = b.x - a.x, ey = b.y - a.y, e2 = ex * ex + ey * ey || 1;
+      for (let i = i0; i <= i1; i++) {
+        for (let j = j0; j <= j1; j++) {
+          const x = i * g, y = j * g;
+          const u = constrain(((x - a.x) * ex + (y - a.y) * ey) / e2, 0, 1);
+          const d = Math.hypot(x - (a.x + ex * u), y - (a.y + ey * u));
+          const idx = i * R + j;
+          if (d < this._cd[idx]) { this._cd[idx] = d; this._cs[idx] = k + u; }
+        }
+      }
+    }
+  }
+
+  // Course attributes at a (fractional) position along it.
+  _attr(cs) {
+    const course = this.course, k = Math.min(course.length - 2, Math.max(0, Math.floor(cs))), u = cs - k;
+    const a = course[k], b = course[k + 1];
+    return {
+      w: lerp(a.w, b.w, u), depth: lerp(a.depth, b.depth, u), speed: lerp(a.speed, b.speed, u),
+      tx: a.tx, ty: a.ty, type: (u < 0.5 ? a : b).type,
+    };
+  }
+
+  _node(x, y) {
+    const i = Math.round(x / this.gridSize), j = Math.round(y / this.gridSize);
+    if (i < 0 || j < 0 || i > this.cols || j > this.rows) return -1;
+    return i * (this.rows + 1) + j;
+  }
+
+  _buildField(seed) {
+    if (!this._cd) this._courseGrid();
+    const R = this.rows + 1;
+    this.field = [];
+    for (let i = 0; i <= this.cols; i++) {
+      this.field[i] = [];
+      const x = i * this.gridSize;
+      for (let j = 0; j <= this.rows; j++) {
+        const y = j * this.gridSize;
+        let bias = 0;
+        for (const b of this.basins) bias += 1 - constrain(dist(x, y, b.x, b.y) / b.r, 0, 1);
+        bias = Math.min(bias, 1);
+        const d = this._cd[i * R + j];
+        if (d < 1e8) {
+          const v = 1 - constrain(d / this._attr(this._cs[i * R + j]).w, 0, 1);
+          bias = Math.max(bias, Math.pow(v, 1.4) * 0.95);
+        }
+        const n =
+          noise(x * 0.0014 + seed,       y * 0.0014 + seed) * 0.6 +
+          noise(x * 0.0035 + seed * 1.7, y * 0.0035 + seed * 1.7) * 0.3 +
+          noise(x * 0.0080 + seed * 2.3, y * 0.0080 + seed * 2.3) * 0.1;
+        const edge = constrain(Math.min(x, y, this.w - x, this.h - y) / 100, 0, 1);
+        this.field[i][j] = (n * 0.45 + bias * 0.75) * edge;
+      }
+    }
+  }
+
+  // Depth follows the reach (riffle / run / pool) and falls away from the
+  // banks toward mid-channel.
+  _depthAtRaw(x, y) {
+    if (!this.contains(x, y)) return 0;
+    let d = 0;
+    for (const b of this.basins) d = Math.max(d, (1 - constrain(dist(x, y, b.x, b.y) / (b.r * 1.05), 0, 1)) * 0.75);
+    const idx = this._node(x, y);
+    if (idx >= 0 && this._cd[idx] < 1e8) {
+      const cp = this._attr(this._cs[idx]);
+      const lat = 1 - Math.pow(Math.min(1, this._cd[idx] / (cp.w * 0.39)), 2);
+      d = Math.max(d, cp.depth * (0.35 + 0.65 * lat));
+    }
+    return d;
+  }
+
+  // The current at a point: unit direction, speed (0..1) and the kind of
+  // water. Speed is zero away from the river and slack along the banks.
+  flowAt(x, y) {
+    const idx = this._node(x, y);
+    if (idx < 0 || this._cd[idx] > 1e8) return { x: 0, y: 0, speed: 0, type: 'pond' };
+    const cp = this._attr(this._cs[idx]);
+    const lat = Math.max(0.25, 1 - 0.75 * Math.pow(Math.min(1, this._cd[idx] / (cp.w * 0.39)), 2));
+    return { x: cp.tx, y: cp.ty, speed: cp.speed * lat, type: cp.type };
+  }
+
+  constructor(w, h) {
+    super(w, h);
+    this.bankMargin = 22;
+    const course = this.course, N = course.length;
+    const at = (p, lat, along) => ({ x: p.x - p.ty * lat + p.tx * along, y: p.y + p.tx * lat + p.ty * along });
+
+    // Lies — where trout hold. Deep slots in the pools, seams in the runs,
+    // tight to the banks, scattered through the riffles. (Pocket lies
+    // behind the boulders are added when those are placed.)
+    this.lies = [];
+    const lie = (p, lat, type) => {
+      const q = at(p, lat * p.w * 0.39, random(-16, 16));
+      if (this.contains(q.x, q.y, 8)) this.lies.push({ x: q.x, y: q.y, type });
+    };
+    for (const p of course) {
+      if (p.type === 'pool')        { lie(p, random(-0.45, 0.45), 'pool'); if (random() < 0.5) lie(p, random(-0.3, 0.3), 'pool'); }
+      else if (p.type === 'riffle') { if (random() < 0.55) lie(p, random(-0.65, 0.65), 'riffle'); }
+      else if (p.type === 'run')    { if (random() < 0.5) lie(p, (random() < 0.5 ? -1 : 1) * random(0.6, 0.82), 'bank');
+                                      if (random() < 0.45) lie(p, random(-0.4, 0.4), 'run'); }
+    }
+
+    // Begin on the bank beside the first riffle.
+    const first = course.find(p => p.type === 'riffle') || course[8];
+    for (const sd of [1, -1]) {
+      const q = at(first, sd * (first.w * 0.39 + 46), 0);
+      if (!this.contains(q.x, q.y, -6)) { this.startPoint = q; break; }
+    }
+    if (!this.startPoint) this.startPoint = at(first, first.w * 0.5, 0);
+
+    // The Lake scattered its surface effects by picking points well clear
+    // of any bank, which in a narrow river leaves most of it bare. Lay them
+    // again along the course, each wavelet riding the local current.
+    const onRiver = (margin) => {
+      for (let t = 0; t < 30; t++) {
+        const p = course[Math.floor(random(N))];
+        const q = at(p, random(-0.9, 0.9) * p.w * 0.39, random(-20, 20));
+        if (this.contains(q.x, q.y, margin)) return { x: q.x, y: q.y, p };
+      }
+      const p = course[Math.floor(N / 2)];
+      return { x: p.x, y: p.y, p };
+    };
+    this.wavelets = [];
+    for (let i = 0; i < 5200; i++) {
+      const q = onRiver(8);
+      this.wavelets.push({
+        x: q.x, y: q.y, len: random(8, 18), seed: random(1000),
+        a: Math.atan2(q.p.ty, q.p.tx) + random(-0.25, 0.25),
+        fx: q.p.tx, fy: q.p.ty, sp: 0.35 + q.p.speed,
+      });
+    }
+    this.caustics = [];
+    for (let i = 0; i < 1500; i++) {
+      const q = onRiver(12);
+      this.caustics.push({ x: q.x, y: q.y, seed: random(1000), size: random(12, 24) });
+    }
+    this.shimmerPoints = [];
+    for (let i = 0; i < 160; i++) { const q = onRiver(10); this.shimmerPoints.push({ x: q.x, y: q.y }); }
+
+    // Broken water through the riffles.
+    this.chop = [];
+    for (const p of course) {
+      if (p.type !== 'riffle') continue;
+      for (let k = 0, n = Math.round(p.w * 0.39 * 80 / 170); k < n; k++) {
+        const q = at(p, random(-1, 1) * p.w * 0.39, random(-20, 20));
+        if (!this.contains(q.x, q.y, 3)) continue;
+        this.chop.push({ x: q.x, y: q.y, fx: p.tx, fy: p.ty, sp: p.speed, len: random(4, 10), seed: random(1000) });
+      }
+    }
+  }
+}
+
+// ---------- WADER (player on foot) ----------
+// The river is fished on foot. The angler hikes the banks at a good pace,
+// slows as the water deepens, and cannot cross water over their waders —
+// the deep holes have to be fished from the edge. Fast current leans on
+// them. Presents the same interface as Kayak so casting, the camera, touch
+// controls and multiplayer need no special cases.
+const WADE_LIMIT = 0.6;          // lake.depthAt() value that tops the waders
+const WADER_SPEED = 2.1;         // hiking pace, world units per frame
+class Wader {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(0, 0);
+    this.heading = 0;
+    this.targetHeading = 0;
+    this.size = 22;               // same figure scale as the paddler
+    this.paddlePhase = 0;         // stride cycle (the field peers already sync)
+    this.maxSpeed = WADER_SPEED;
+    this.onFoot = true;
+    this.wade = 0;                // 0 on land, else depth where they stand
+    this.mobileAim = null;        // set by the touch joystick, as for the kayak
+    this.wakeCooldown = 0;
+  }
+
+  // Deep enough to stop a wader?
+  _tooDeep(x, y) {
+    return lake.insideAmount(x, y) > 0 && lake.depthAt(x, y) > WADE_LIMIT;
+  }
+
+  update() {
+    // Direction: the stick on touch, W A S D (screen directions) on keys.
+    let ix = 0, iy = 0;
+    if (this.mobileAim && this.mobileAim.mag > 0) {
+      const m = Math.hypot(this.mobileAim.dx, this.mobileAim.dy) || 1;
+      const k = Math.min(1, this.mobileAim.mag);
+      ix = (this.mobileAim.dx / m) * k; iy = (this.mobileAim.dy / m) * k;
+    } else {
+      if (keys.left)  ix -= 1;
+      if (keys.right) ix += 1;
+      if (keys.up)    iy -= 1;
+      if (keys.down)  iy += 1;
+      const m = Math.hypot(ix, iy);
+      if (m > 1) { ix /= m; iy /= m; }
+    }
+
+    const inWater = lake.insideAmount(this.pos.x, this.pos.y) > 0;
+    const depth = inWater ? lake.depthAt(this.pos.x, this.pos.y) : 0;
+    this.wade = inWater ? Math.max(0.12, depth) : 0;
+
+    // Hiking is quick; wading slows the deeper it gets.
+    const pace = inWater ? lerp(0.62, 0.3, constrain(depth / WADE_LIMIT, 0, 1)) : 1;
+    this.vel.x = lerp(this.vel.x, ix * this.maxSpeed * pace, 0.2);
+    this.vel.y = lerp(this.vel.y, iy * this.maxSpeed * pace, 0.2);
+    const speed = this.vel.mag();
+
+    if (speed > 0.15) {
+      this.heading = lerpAngle(this.heading, this.vel.heading(), 0.2);
+      const prev = this.paddlePhase;
+      this.paddlePhase += speed * 0.17;
+      // footfall on each half-stride, a splash when wading
+      if (Math.sign(Math.sin(prev)) !== Math.sign(Math.sin(this.paddlePhase))) {
+        if (inWater) playSound('paddle', { volume: 0.25, rate: 1.2 + Math.random() * 0.2 });
+      }
+    } else if (cast && cast.state !== 'done') {
+      // Standing still with a cast out: turn to face it.
+      const tx = cast.state === 'aerial' ? mouseX / zoom + cam.x : cast.flyX;
+      const ty = cast.state === 'aerial' ? mouseY / zoom + cam.y : cast.flyY;
+      const want = Math.atan2(ty - this.pos.y, tx - this.pos.x);
+      this.heading = lerpAngle(this.heading, want, 0.12);
+    }
+    this.targetHeading = this.heading;
+
+    // Step, but never into water over the waders: slide along the edge of
+    // the hole instead.
+    let nx = this.pos.x + this.vel.x, ny = this.pos.y + this.vel.y;
+    if (this._tooDeep(nx, ny)) {
+      if (!this._tooDeep(nx, this.pos.y))      { ny = this.pos.y; this.vel.y = 0; }
+      else if (!this._tooDeep(this.pos.x, ny)) { nx = this.pos.x; this.vel.x = 0; }
+      else                                     { nx = this.pos.x; ny = this.pos.y; this.vel.mult(0); }
+    }
+    // Fast water shoves a wading angler downstream, more the deeper they stand.
+    if (inWater) {
+      const f = lake.flowAt(nx, ny);
+      const push = f.speed * 0.28 * constrain(depth / WADE_LIMIT, 0.15, 1);
+      const px = nx + f.x * push, py = ny + f.y * push;
+      if (!this._tooDeep(px, py)) { nx = px; ny = py; }
+    }
+    // Boulders are solid.
+    for (const r of rocks) {
+      if (r.r < 9) continue;
+      const dx = nx - r.x, dy = ny - r.y, d = Math.hypot(dx, dy), min = r.r * 0.85 + 5;
+      if (d < min && d > 0.01) { nx = r.x + (dx / d) * min; ny = r.y + (dy / d) * min; }
+    }
+    this.pos.x = constrain(nx, 40, WORLD_W - 40);
+    this.pos.y = constrain(ny, 40, WORLD_H - 40);
+
+    // Rings off the legs while wading.
+    this.wakeCooldown = Math.max(0, this.wakeCooldown - 1);
+    if (inWater && speed > 0.35 && this.wakeCooldown === 0) {
+      ripples.push(new Ripple(this.pos.x, this.pos.y, 11 + speed * 5));
+      this.wakeCooldown = 16;
+    }
+  }
+
+  draw() {
+    const ctx = drawingContext, casting = !!cast && cast.state !== 'done';
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(this.heading);
+    Art.wader(ctx, this.size, playerAppearance, {
+      heading: this.heading, walkPhase: this.paddlePhase, speed: this.vel.mag(),
+      wade: this.wade, casting, rod: casting ? cast.rodPose() : null,
+    });
+    ctx.restore();
+  }
+}
+
 // ---------- FISH species config ----------
 // Each species also has a `class` field: 'panfish' (uses boid flocking) or
 // 'bass' (uses lurker/strike AI). That picks which constructor and which
@@ -3138,7 +3642,8 @@ const SPECIES = {
 
 // ---------- PANFISH (boids) ----------
 class Panfish {
-  constructor(x, y, species) {
+  constructor(x, y, species, lie) {
+    this.lie = lie || null;                 // river only: the spot this fish holds
     this.species = species || 'bluegill';
     this.cfg = SPECIES[this.species];
     this.pos = createVector(x, y);
@@ -3159,6 +3664,12 @@ class Panfish {
   }
 
   _pickHabitat() {
+    if (lake.lies) {
+      // A river trout keeps its lie, and now and then moves to another.
+      if (!this.lie || random() < 0.25) this.lie = pickLie(this.species) || this.lie;
+      this.habitatTarget = this.lie;
+      return;
+    }
     let pool = null;
     if (this.cfg.habitat === 'weeds') pool = weeds;
     else if (this.cfg.habitat === 'lilypads') pool = lilypads;
@@ -3306,7 +3817,7 @@ class Panfish {
     if (this.habitatTarget) {
       let to = createVector(this.habitatTarget.x - this.pos.x, this.habitatTarget.y - this.pos.y);
       let d = to.mag();
-      if (d > 30) {
+      if (d > (lake.lies ? 12 : 30)) {
         to.setMag(this.maxSpeed * 0.7);
         to.sub(this.vel).limit(this.maxForce);
         this.acc.add(to.mult(cfg.habitatW * 30));
@@ -3320,9 +3831,11 @@ class Panfish {
       this.acc.add(inward.copy().mult(cfg.depthBias * 30));
     }
 
-    // boundary push
-    if (inAmt < 60) {
-      let t = constrain(map(inAmt, 60, -10, 0, 1), 0, 1);
+    // boundary push — a river is narrow, so fish there are allowed much
+    // closer to the bank than on a lake.
+    const edge = lake.bankMargin || 60;
+    if (inAmt < edge) {
+      let t = constrain(map(inAmt, edge, -10, 0, 1), 0, 1);
       let strength = lerp(this.maxForce * 2, this.maxForce * 30, t);
       let inward = lake.inwardNormal(this.pos.x, this.pos.y);
       this.acc.add(inward.copy().mult(strength));
@@ -3369,9 +3882,20 @@ class Panfish {
     // seen from this height, but every species keeps its place — panfish
     // smaller than trout, trout smaller than bass, nothing longer than the boat.
     const L = this.size * 1.3, ctx = drawingContext;
+    // In current a trout holding its lie points upstream and sculls in
+    // place; the faster the water and the slower the fish, the more it
+    // lines up nose-into-the-flow rather than along its own drift.
+    let face = this.vel.heading();
+    if (lake.flowAt) {
+      const f = lake.flowAt(this.pos.x, this.pos.y);
+      if (f.speed > 0.05) {
+        const holding = 1 - Math.min(1, this.vel.mag() / (this.maxSpeed * 0.7));
+        face = lerpAngle(face, Math.atan2(-f.y, -f.x), holding * Math.min(1, f.speed * 2.2));
+      }
+    }
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
-    ctx.rotate(this.vel.heading());
+    ctx.rotate(face);
     // The swim wave runs off this.wiggle, which already advances faster the
     // faster the fish moves; the tail also swings wider at speed.
     const effort = Math.min(1, this.vel.mag() / (this.maxSpeed || 1));
@@ -4335,6 +4859,14 @@ class FlyCast {
       // Wind drift on the water — fly skitters downwind
       this.flyX += wind.x * 0.22;
       this.flyY += wind.y * 0.22;
+      // On a river the current carries the fly downstream — quick through
+      // the riffles, slow across a pool. The tether below turns that into
+      // a swing once the line comes tight.
+      if (lake.flowAt) {
+        const f = lake.flowAt(this.flyX, this.flyY);
+        this.flyX += f.x * f.speed * 0.55;
+        this.flyY += f.y * f.speed * 0.55;
+      }
 
       // Line tether — if the kayak has paddled past the line length, the
       // line pulls the fly along. Drags surface ripples too.
@@ -5082,7 +5614,7 @@ function wireDerbyUI() {
       }
       list.innerHTML = rows.map(r => {
         const n    = (r.derby_players || []).length;
-        const lake = r.level === 'alpineLake' ? 'Alpine Lake' : 'Bass Lake';
+        const lake = (LEVELS[r.level] && LEVELS[r.level].name) || 'Bass Lake';
         const mins = Math.round(r.duration_secs / 60);
         return `<div class="derby-list-item">
           <div>
@@ -5359,13 +5891,21 @@ function lerpAngle(a, b, t) {
 // Another angler's kayak, in their own colors and slightly sheer so it
 // reads as someone else's boat rather than yours.
 function drawGhostKayak(x, y, heading, paddlePhase, appearance, rod) {
-  const ctx = drawingContext;
+  const ctx = drawingContext, ap = appearance || { hull: 'navy', pfd: 'cyan', hat: 'green' };
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(heading);
-  Art.kayak(ctx, 22, appearance || { hull: 'navy', pfd: 'cyan', hat: 'green' }, {
-    heading, paddlePhase: paddlePhase || 0, casting: !!rod, rod, alpha: 0.88,
-  });
+  if (lvl().onFoot) {
+    // On the river everyone is on foot. We don't receive how deep they
+    // stand, so read it off the water under them.
+    const inWater = lake.insideAmount(x, y) > 0;
+    Art.wader(ctx, 22, ap, {
+      heading, walkPhase: paddlePhase || 0, speed: 1, casting: !!rod, rod, alpha: 0.88,
+      wade: inWater ? Math.max(0.12, lake.depthAt(x, y)) : 0,
+    });
+  } else {
+    Art.kayak(ctx, 22, ap, { heading, paddlePhase: paddlePhase || 0, casting: !!rod, rod, alpha: 0.88 });
+  }
   ctx.restore();
 }
 
@@ -5495,7 +6035,7 @@ function showDerbyResults() {
   }
 
   document.getElementById('results-subtitle').textContent =
-    (d.level === 'alpineLake' ? 'Alpine Lake' : 'Bass Lake') + ' · ' +
+    ((LEVELS[d.level] && LEVELS[d.level].name) || 'Bass Lake') + ' · ' +
     Math.round(d.duration_secs / 60) + ' min · ' + sorted.length + ' angler' + (sorted.length === 1 ? '' : 's');
 
   const board = document.getElementById('results-board');
@@ -5977,7 +6517,16 @@ function sampleWaterAtKayak() {
   // alpine vs warm bass lake have very different baitfish.
   const isAlpine = currentLevel === 'alpineLake';
   const baits = [];
-  if (isAlpine) {
+  if (lvl().river) {
+    // Freestone river: what turns up depends on the water you kick.
+    const reach = lake.flowAt(px, py).type;
+    bugs.length = 0;
+    if (reach === 'riffle')      bugs.push('Stonefly nymphs', 'Caddis larvae', 'Mayfly nymphs');
+    else if (reach === 'pool')   bugs.push('Midge larvae', 'Mayfly nymphs');
+    else                         bugs.push('Mayfly nymphs', 'Caddis larvae');
+    if (nearRocks || reach === 'riffle') baits.push('Sculpin');
+    baits.push('Trout fry');
+  } else if (isAlpine) {
     if (nearRocks)   baits.push('Sculpin');
     if (nearWeeds)   baits.push('Trout fry');
     if (nearLogs)    baits.push('Smelt');
@@ -5994,7 +6543,8 @@ function sampleWaterAtKayak() {
   let recFly = null, recReason = '';
   if (hatchInfo) {
     recFly = hatchInfo.fly;
-    recReason = hatchInfo.inside ? 'inside the hatch — match it' : 'hatch nearby — paddle over';
+    recReason = hatchInfo.inside ? 'inside the hatch — match it'
+              : (lvl().onFoot ? 'hatch nearby — work your way over' : 'hatch nearby — paddle over');
   } else if (nearRocks || nearLogs || nearSnags) {
     recFly = 'woolyBugger';
     recReason = 'cover holds predators — strip a streamer';
